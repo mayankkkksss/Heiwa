@@ -59,6 +59,14 @@ export class Engine {
 
   initEventListeners() {
     window.addEventListener('resize', () => this.handleResize());
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => this.handleResize(), 50);
+    });
+    if (window.screen && window.screen.orientation) {
+      window.screen.orientation.addEventListener('change', () => {
+        setTimeout(() => this.handleResize(), 50);
+      });
+    }
   }
 
   handleResize() {
@@ -69,7 +77,9 @@ export class Engine {
     this.camera.updateProjectionMatrix();
 
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const maxDpr = isMobile ? 1.5 : 2.0;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
 
     globalBus.emit('viewport:resize', { width, height });
   }

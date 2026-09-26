@@ -11,6 +11,7 @@ import { UISystem } from './systems/UISystem.js';
 import { globalBus } from './engine/EventBus.js';
 import { globalGameState, GameState } from './engine/GameStateManager.js';
 import { globalInput } from './engine/InputManager.js';
+import { TouchControls } from './engine/TouchControls.js';
 
 /**
  * Display a production-safe startup error overlay in case of fatal initialization failure.
@@ -74,6 +75,9 @@ class GameApp {
       }
 
       globalInput.setCanvas(canvas);
+
+      // Initialize mobile touch controls and orientation monitor
+      this.touchControls = new TouchControls();
 
       // 1. Initialize Core Engine
       this.engine = new Engine(canvas);

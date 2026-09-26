@@ -20,6 +20,23 @@
 
       <!-- UI Overlays Root -->
       <div id="ui-root">
+        <!-- 0. ORIENTATION SCREEN (Mobile Portrait Warning) -->
+        <section id="orientation-screen" class="screen-layer orientation-screen hidden">
+          <div class="orientation-content">
+            <div class="orientation-kanji">平和</div>
+            <div class="orientation-device-icon">
+              <svg viewBox="0 0 48 48" class="device-rotate-svg" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="14" y="6" width="20" height="36" rx="4" ry="4" class="phone-body" />
+                <line x1="22" y1="36" x2="26" y2="36" />
+                <path d="M8 18 C8 10, 18 4, 30 4" class="arrow-arc" />
+                <polyline points="26 1 31 4 27 9" />
+              </svg>
+            </div>
+            <h2 class="orientation-title">Landscape Mode Required</h2>
+            <p class="orientation-message">Please rotate your device to landscape to play HEIWA.</p>
+          </div>
+        </section>
+
         <!-- 1. TITLE SCREEN -->
         <section id="title-screen" class="screen-layer title-screen">
           <div class="title-backdrop-gradient"></div>
@@ -106,6 +123,40 @@
             <span id="interaction-text" class="prompt-label">Interact</span>
           </div>
         </section>
+
+        <!-- Mobile Landscape Touch Controls Layer -->
+        <div id="touch-controls-root" class="touch-controls-root hidden">
+          <!-- Left: Virtual Movement Joystick -->
+          <div id="touch-joystick-zone" class="touch-joystick-zone">
+            <div id="joystick-base" class="joystick-base">
+              <div id="joystick-knob" class="joystick-knob"></div>
+            </div>
+          </div>
+
+          <!-- Right: Touch Look / Camera Orbit Drag Zone -->
+          <div id="touch-look-zone" class="touch-look-zone"></div>
+
+          <!-- Bottom Right: Action Touch Buttons -->
+          <div id="touch-action-buttons" class="touch-action-buttons">
+            <button id="touch-btn-jog" class="touch-btn touch-btn-jog" aria-label="Toggle Jog">
+              <span class="touch-btn-sub">RUN</span>
+              <span class="touch-btn-label">JOG</span>
+            </button>
+            <button id="touch-btn-interact" class="touch-btn touch-btn-interact" aria-label="Interact">
+              <span class="touch-btn-sub">E</span>
+              <span id="touch-interact-label" class="touch-btn-label">ACTION</span>
+            </button>
+            <button id="touch-btn-jump" class="touch-btn touch-btn-jump" aria-label="Jump">
+              <span class="touch-btn-sub">SPACE</span>
+              <span class="touch-btn-label">JUMP</span>
+            </button>
+          </div>
+
+          <!-- Top-Right: Mobile Pause Button -->
+          <button id="touch-btn-pause" class="touch-btn-pause" aria-label="Pause Menu">
+            <span>⏸</span>
+          </button>
+        </div>
 
         <!-- 4. DIALOGUE MODAL -->
         <div id="dialogue-modal" class="dialogue-modal hidden">

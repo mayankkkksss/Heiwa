@@ -19,6 +19,11 @@ export class InputManager {
     this.canvas = null;
     this.isDialogueActive = false;
     this.isSitting = false;
+
+    // Touch / Mobile Input State
+    this.touchMovement = { x: 0, z: 0, length: 0 };
+    this.isJogToggled = false;
+
     this.setupListeners();
   }
 
@@ -43,6 +48,7 @@ export class InputManager {
       if (data.to !== GameState.PLAYING) {
         this.isDialogueActive = false;
         this.isSitting = false;
+        this.touchMovement = { x: 0, z: 0, length: 0 };
       }
     });
 
@@ -130,6 +136,7 @@ export class InputManager {
       this.keys.clear();
       this.jumpRequested = false;
       this.mouse.isDown = false;
+      this.touchMovement = { x: 0, z: 0, length: 0 };
     });
 
     // Mouse events
@@ -167,6 +174,65 @@ export class InputManager {
   }
 
   /**
+   * Set mobile virtual joystick movement vector
+   */
+  setTouchMovement(x, z, length) {
+    this.touchMovement.x = x;
+    this.touchMovement.z = z;
+    this.touchMovement.length = length;
+  }
+
+  /**
+   * Add touch camera delta for smooth third-person look
+   */
+  addTouchCameraDelta(dx, dy) {
+    this.mouse.deltaX += dx;
+    this.mouse.deltaY += dy;
+  }
+
+  /**
+   * Mobile touch Jump trigger
+   */
+  requestJump() {
+    if (this.isSitting) {
+      globalBus.emit('player:stand');
+      return;
+    }
+    if (globalGameState.is(GameState.PLAYING) && !this.isDialogueActive) {
+      this.jumpRequested = true;
+    }
+  }
+
+  /**
+   * Mobile touch Interact trigger
+   */
+  requestInteract() {
+    if (this.isDialogueActive) {
+      globalBus.emit('dialogue:close');
+      return;
+    }
+    if (this.isSitting) {
+      globalBus.emit('player:stand');
+      return;
+    }
+    if (globalGameState.is(GameState.PLAYING)) {
+      globalBus.emit('input:interact');
+    }
+  }
+
+  /**
+   * Toggle jog state on mobile
+   */
+  toggleJog() {
+    this.isJogToggled = !this.isJogToggled;
+    return this.isJogToggled;
+  }
+
+  setJogToggle(active) {
+    this.isJogToggled = active;
+  }
+
+  /**
    * Consumes single-frame jump press
    */
   consumeJumpPress() {
@@ -190,7 +256,7 @@ export class InputManager {
     let x = 0;
     let z = 0;
 
-    // Forward / Backward
+    // Keyboard Forward / Backward
     if (this.isKeyPressed('KeyW') || this.isKeyPressed('ArrowUp') || this.isKeyPressed('w')) {
       z -= 1;
     }
@@ -198,7 +264,7 @@ export class InputManager {
       z += 1;
     }
 
-    // Left / Right
+    // Keyboard Left / Right
     if (this.isKeyPressed('KeyA') || this.isKeyPressed('ArrowLeft') || this.isKeyPressed('a')) {
       x -= 1;
     }
@@ -206,16 +272,23 @@ export class InputManager {
       x += 1;
     }
 
-    const length = Math.hypot(x, z);
+    let length = Math.hypot(x, z);
     if (length > 0.001) {
       x /= length;
       z /= length;
+    } else if (this.touchMovement.length > 0.001) {
+      // Use analog touch joystick input
+      x = this.touchMovement.x;
+      z = this.touchMovement.z;
+      length = this.touchMovement.length;
     }
 
-    const isJogging =
+    const isJoggingKey =
       this.isKeyPressed('ShiftLeft') ||
       this.isKeyPressed('ShiftRight') ||
       this.isKeyPressed('shift');
+
+    const isJogging = isJoggingKey || this.isJogToggled;
 
     return {
       x,
