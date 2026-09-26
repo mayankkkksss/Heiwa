@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>HEIWA - A Quiet Life in Japan</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="game-container">
+      <canvas id="webgl-canvas"></canvas>
+
+      <!-- UI Overlays Root -->
+      <div id="ui-root">
+        <!-- 1. TITLE SCREEN -->
+        <section id="title-screen" class="screen-layer title-screen">
+          <div class="title-backdrop-gradient"></div>
+          <div class="title-content">
+            <div class="title-identity">
+              <h1 class="title-kanji">平和</h1>
+              <div class="title-romaji">HEIWA</div>
+              <p class="title-subtitle">A quiet life in Japan.</p>
+            </div>
+
+            <div class="title-menu">
+              <button id="btn-begin" class="btn-primary">
+                <span class="btn-text">BEGIN</span>
+                <span class="btn-subtext">PRESS ENTER</span>
+              </button>
+
+              <div class="title-secondary-actions">
+                <button id="btn-settings" class="btn-secondary">Settings</button>
+                <span class="action-divider">•</span>
+                <button id="btn-about" class="btn-secondary">About</button>
+              </div>
+            </div>
+
+            <div class="title-footer-hint">Press [ENTER] to Begin</div>
+          </div>
+        </section>
+
+        <!-- 2. LOADING SCREEN -->
+        <section id="loading-screen" class="screen-layer loading-screen hidden">
+          <div class="loading-content">
+            <div class="loading-brand">
+              <span class="loading-en">HEIWA</span>
+            </div>
+
+            <div class="loading-indicator-area">
+              <div class="loading-track">
+                <div id="loading-bar-fill" class="loading-fill" style="width: 0%"></div>
+              </div>
+              <div id="loading-stage-label" class="loading-stage">INITIALIZING ENVIRONMENT...</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. GAMEPLAY MINIMAL HUD -->
+        <section id="gameplay-hud" class="screen-layer gameplay-hud hidden">
+          <!-- Top-Left: Minimal Minimap & Location -->
+          <header class="hud-top-left">
+            <div class="minimap-wrapper">
+              <canvas id="minimap-canvas" width="80" height="80"></canvas>
+            </div>
+            <div class="district-badge">
+              <span id="hud-location-text" class="badge-name">Sakura Heights</span>
+            </div>
+          </header>
+
+          <!-- Top-Right: Atmospheric Time Display -->
+          <aside class="hud-top-right">
+            <div class="hud-time-widget">
+              <span id="hud-time-icon" class="time-icon">☀️</span>
+              <span id="hud-time-str" class="time-text">9:00 AM</span>
+              <button id="hud-step-time-btn" title="Step Time of Day" class="hud-step-btn">🕒</button>
+            </div>
+          </aside>
+
+          <!-- Objective Display (Minimal, Quiet) -->
+          <div id="objective-card" class="objective-card">
+            <div class="objective-tag">OBJECTIVE</div>
+            <div id="objective-title" class="objective-title">Visit HIKARI MART</div>
+            <div id="objective-desc" class="objective-desc"></div>
+          </div>
+
+          <!-- Brief Startup Control Hint (Fades away after 4.5s) -->
+          <div id="startup-control-hint" class="startup-control-hint">
+            <div class="hint-item"><span class="key-pill">WASD</span> Move</div>
+            <div class="hint-item"><span class="key-pill">Mouse</span> Look</div>
+            <div class="hint-item"><span class="key-pill">Shift</span> Jog</div>
+            <div class="hint-item"><span class="key-pill">Space</span> Jump</div>
+            <div class="hint-item"><span class="key-pill">E</span> Interact</div>
+          </div>
+
+          <!-- Contextual Interaction Prompt: "E  Interact" -->
+          <div id="interaction-prompt" class="interaction-prompt hidden">
+            <span class="prompt-key">E</span>
+            <span id="interaction-text" class="prompt-label">Interact</span>
+          </div>
+        </section>
+
+        <!-- 4. DIALOGUE MODAL -->
+        <div id="dialogue-modal" class="dialogue-modal hidden">
+          <div class="dialogue-avatar" id="dialogue-avatar">👤</div>
+          <div class="dialogue-body">
+            <div id="dialogue-speaker" class="dialogue-speaker">Neighbor</div>
+            <div id="dialogue-text" class="dialogue-text">...</div>
+            <div class="dialogue-footer">
+              <span class="dialogue-hint">Press [E] / [Enter] to continue • [Esc] to close</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. PAUSE MENU -->
+        <div id="pause-modal" class="pause-modal hidden">
+          <div class="pause-card">
+            <div class="pause-header">
+              <span class="pause-jp">PAUSE</span>
+              <h2 class="pause-title">PAUSED</h2>
+            </div>
+
+            <div class="pause-menu-actions">
+              <button id="btn-pause-resume" class="btn-pause primary">Resume Game</button>
+              <button id="btn-pause-audio" class="btn-pause">Ambience: On 🔊</button>
+              <button id="btn-pause-controls" class="btn-pause">Controls Guide</button>
+              <button id="btn-pause-quit" class="btn-pause danger">Return to Title Screen</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. SETTINGS / ABOUT MODAL -->
+        <div id="info-modal" class="info-modal hidden">
+          <div class="info-card">
+            <div class="info-header">
+              <h3 id="info-modal-title">Settings</h3>
+              <button id="btn-info-close" class="btn-close">✕</button>
+            </div>
+            <div id="info-modal-body" class="info-body">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toast-container" class="toast-container"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
