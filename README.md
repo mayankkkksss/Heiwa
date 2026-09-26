@@ -67,7 +67,7 @@ node scripts/test_startup.js
 
 ## 🌐 Deploying to Vercel
 
-HEIWA is configured for seamless static deployment on [Vercel](https://vercel.com/):
+HEIWA is configured for seamless static deployment on [Vercel](https://heiwa-henna.vercel.app/):
 
 1. **Import Git Repository** on Vercel Dashboard.
 2. **Framework Preset**: `Vite` (auto-detected).
