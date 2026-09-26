@@ -348,33 +348,382 @@ export class NPCSystem {
       group.scale.setScalar(config.scale);
     }
 
-    const skinMat = new THREE.MeshStandardMaterial({ color: config.colors.skin, roughness: 0.65 });
-    const hairMat = new THREE.MeshStandardMaterial({ color: config.colors.hair, roughness: 0.5 });
+    // ========================================================================
+    // 1. NPC PALETTES & MATERIAL SYSTEM
+    // ========================================================================
+    const skinColor = new THREE.Color(config.colors.skin);
+    const skinMat = new THREE.MeshStandardMaterial({
+      color: config.colors.skin,
+      roughness: 0.55,
+      metalness: 0.0,
+    });
+    const skinShadowMat = new THREE.MeshStandardMaterial({
+      color: skinColor.clone().multiplyScalar(0.85).getHex(),
+      roughness: 0.65,
+      metalness: 0.0,
+    });
+    const skinHighlightMat = new THREE.MeshStandardMaterial({
+      color: skinColor.clone().offsetHSL(0, -0.02, 0.06).getHex(),
+      roughness: 0.50,
+      metalness: 0.0,
+    });
+
+    const hairColor = new THREE.Color(config.colors.hair);
+    const hairMat = new THREE.MeshStandardMaterial({
+      color: config.colors.hair,
+      roughness: 0.72,
+      metalness: 0.04,
+      side: THREE.DoubleSide,
+    });
+    const hairHighlightMat = new THREE.MeshStandardMaterial({
+      color: hairColor.clone().offsetHSL(0, 0.04, 0.08).getHex(),
+      roughness: 0.68,
+      metalness: 0.04,
+      side: THREE.DoubleSide,
+    });
+
+    const eyebrowMat = new THREE.MeshStandardMaterial({
+      color: config.colors.hair,
+      roughness: 0.88,
+    });
+    const eyeWhiteMat = new THREE.MeshStandardMaterial({
+      color: 0xfbfcfe,
+      roughness: 0.15,
+      metalness: 0.0,
+    });
+    const eyeIrisMat = new THREE.MeshStandardMaterial({
+      color: 0x2b170c,
+      roughness: 0.15,
+      metalness: 0.05,
+    });
+    const eyePupilMat = new THREE.MeshStandardMaterial({
+      color: 0x080402,
+      roughness: 0.10,
+    });
+    const eyeGleamMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.05,
+    });
+    const eyelidMat = new THREE.MeshStandardMaterial({
+      color: 0x181413,
+      roughness: 0.85,
+    });
+    const lipMat = new THREE.MeshStandardMaterial({
+      color: 0xaa5b48,
+      roughness: 0.58,
+    });
+
     const topMat = new THREE.MeshStandardMaterial({ color: config.colors.top, roughness: 0.75 });
     const pantsMat = new THREE.MeshStandardMaterial({ color: config.colors.pants, roughness: 0.8 });
     const shoeMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 });
 
-    // 1. Torso
+    // ========================================================================
+    // 2. TORSO & APPAREL
+    // ========================================================================
     const torsoGeo = new THREE.BoxGeometry(0.44, 0.58, 0.26);
     const torso = new THREE.Mesh(torsoGeo, topMat);
     torso.position.y = 1.05;
-    torso.castShadow = true;
-    torso.receiveShadow = true;
     group.add(torso);
 
-    // 2. Head & Hair
-    const headGeo = new THREE.SphereGeometry(0.16, 16, 16);
-    const head = new THREE.Mesh(headGeo, skinMat);
+    // ========================================================================
+    // 3. REUSABLE ANIME FACE & 360° HAIRSTYLE SYSTEM
+    // ========================================================================
+    const head = new THREE.Group();
     head.position.y = 1.48;
-    head.castShadow = true;
+
+    // Visible neck connection bridging torso and head
+    const neckGeo = new THREE.CylinderGeometry(0.058, 0.066, 0.15, 16);
+    const neck = new THREE.Mesh(neckGeo, skinShadowMat);
+    neck.position.set(0, -0.09, -0.01);
+    head.add(neck);
+
+    // Cranium base
+    const craniumGeo = new THREE.SphereGeometry(0.142, 22, 18);
+    const cranium = new THREE.Mesh(craniumGeo, skinMat);
+    cranium.position.set(0, 0.012, 0.0);
+    cranium.scale.set(0.95, 1.04, 0.98);
+    head.add(cranium);
+
+    // Jaw and chin definition
+    const jawGeo = new THREE.CylinderGeometry(0.100, 0.056, 0.12, 14);
+    const jaw = new THREE.Mesh(jawGeo, skinMat);
+    jaw.position.set(0, -0.058, 0.022);
+    jaw.scale.set(1.0, 1.0, 0.85);
+    head.add(jaw);
+
+    // Sculpted chin
+    const chinGeo = new THREE.SphereGeometry(0.032, 12, 12);
+    const chin = new THREE.Mesh(chinGeo, skinMat);
+    chin.position.set(0, -0.105, 0.078);
+    chin.scale.set(1.1, 0.85, 0.95);
+    head.add(chin);
+
+    // Subtle cheek fullness
+    const cheekGeo = new THREE.BoxGeometry(0.040, 0.035, 0.060);
+    const leftCheek = new THREE.Mesh(cheekGeo, skinHighlightMat);
+    leftCheek.position.set(-0.078, -0.012, 0.070);
+    leftCheek.rotation.set(0.1, -0.25, 0.15);
+    head.add(leftCheek);
+
+    const rightCheek = new THREE.Mesh(cheekGeo, skinHighlightMat);
+    rightCheek.position.set(0.078, -0.012, 0.070);
+    rightCheek.rotation.set(0.1, 0.25, -0.15);
+    head.add(rightCheek);
+
+    // Symmetrical ears
+    const earGeo = new THREE.CylinderGeometry(0.036, 0.028, 0.015, 10);
+    const earInnerGeo = new THREE.CylinderGeometry(0.022, 0.016, 0.016, 10);
+
+    const leftEar = new THREE.Mesh(earGeo, skinMat);
+    leftEar.position.set(-0.138, 0.005, -0.014);
+    leftEar.rotation.set(0.10, -0.22, 0.15);
+    const leftEarInner = new THREE.Mesh(earInnerGeo, skinShadowMat);
+    leftEar.add(leftEarInner);
+    head.add(leftEar);
+
+    const rightEar = new THREE.Mesh(earGeo, skinMat);
+    rightEar.position.set(0.138, 0.005, -0.014);
+    rightEar.rotation.set(0.10, 0.22, -0.15);
+    const rightEarInner = new THREE.Mesh(earInnerGeo, skinShadowMat);
+    rightEar.add(rightEarInner);
+    head.add(rightEar);
+
+    // ------------------------------------------------------------------------
+    // Facial Features: Eyebrows, Eyes, Nose, Mouth
+    // ------------------------------------------------------------------------
+    const eyebrowGeo = new THREE.BoxGeometry(0.052, 0.009, 0.018);
+    const leftEyebrow = new THREE.Mesh(eyebrowGeo, eyebrowMat);
+    leftEyebrow.position.set(-0.048, 0.046, 0.138);
+    leftEyebrow.rotation.set(-0.05, 0.08, 0.06);
+    head.add(leftEyebrow);
+
+    const rightEyebrow = new THREE.Mesh(eyebrowGeo, eyebrowMat);
+    rightEyebrow.position.set(0.048, 0.046, 0.138);
+    rightEyebrow.rotation.set(-0.05, -0.08, -0.06);
+    head.add(rightEyebrow);
+
+    // Eyes
+    const eyeScleraGeo = new THREE.SphereGeometry(0.025, 14, 10);
+    const eyeIrisGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.007, 14);
+    const eyePupilGeo = new THREE.CylinderGeometry(0.0075, 0.0075, 0.008, 10);
+    const eyeGleamGeo = new THREE.SphereGeometry(0.004, 8, 8);
+    const eyelidGeo = new THREE.BoxGeometry(0.044, 0.006, 0.016);
+
+    // Left Eye
+    const leftEyeGroup = new THREE.Group();
+    leftEyeGroup.position.set(-0.048, 0.009, 0.136);
+
+    const leftSclera = new THREE.Mesh(eyeScleraGeo, eyeWhiteMat);
+    leftSclera.scale.set(1.22, 0.80, 0.45);
+    leftEyeGroup.add(leftSclera);
+
+    const leftLid = new THREE.Mesh(eyelidGeo, eyelidMat);
+    leftLid.position.set(0, 0.011, 0.009);
+    leftLid.rotation.set(-0.1, 0, 0.04);
+    leftEyeGroup.add(leftLid);
+
+    const leftIris = new THREE.Mesh(eyeIrisGeo, eyeIrisMat);
+    leftIris.position.set(0.002, -0.001, 0.011);
+    leftIris.rotation.x = Math.PI / 2;
+    leftEyeGroup.add(leftIris);
+
+    const leftPupil = new THREE.Mesh(eyePupilGeo, eyePupilMat);
+    leftPupil.position.set(0.002, -0.001, 0.013);
+    leftPupil.rotation.x = Math.PI / 2;
+    leftEyeGroup.add(leftPupil);
+
+    const leftGleam = new THREE.Mesh(eyeGleamGeo, eyeGleamMat);
+    leftGleam.position.set(0.006, 0.004, 0.015);
+    leftEyeGroup.add(leftGleam);
+
+    head.add(leftEyeGroup);
+
+    // Right Eye
+    const rightEyeGroup = new THREE.Group();
+    rightEyeGroup.position.set(0.048, 0.009, 0.136);
+
+    const rightSclera = new THREE.Mesh(eyeScleraGeo, eyeWhiteMat);
+    rightSclera.scale.set(1.22, 0.80, 0.45);
+    rightEyeGroup.add(rightSclera);
+
+    const rightLid = new THREE.Mesh(eyelidGeo, eyelidMat);
+    rightLid.position.set(0, 0.011, 0.009);
+    rightLid.rotation.set(-0.1, 0, -0.04);
+    rightEyeGroup.add(rightLid);
+
+    const rightIris = new THREE.Mesh(eyeIrisGeo, eyeIrisMat);
+    rightIris.position.set(-0.002, -0.001, 0.011);
+    rightIris.rotation.x = Math.PI / 2;
+    rightEyeGroup.add(rightIris);
+
+    const rightPupil = new THREE.Mesh(eyePupilGeo, eyePupilMat);
+    rightPupil.position.set(-0.002, -0.001, 0.013);
+    rightPupil.rotation.x = Math.PI / 2;
+    rightEyeGroup.add(rightPupil);
+
+    const rightGleam = new THREE.Mesh(eyeGleamGeo, eyeGleamMat);
+    rightGleam.position.set(0.006, 0.004, 0.015);
+    rightEyeGroup.add(rightGleam);
+
+    head.add(rightEyeGroup);
+
+    // Nose
+    const noseBridgeGeo = new THREE.BoxGeometry(0.016, 0.044, 0.024);
+    const noseBridge = new THREE.Mesh(noseBridgeGeo, skinMat);
+    noseBridge.position.set(0, -0.010, 0.142);
+    noseBridge.rotation.x = 0.2;
+    head.add(noseBridge);
+
+    const noseTipGeo = new THREE.SphereGeometry(0.014, 8, 8);
+    const noseTip = new THREE.Mesh(noseTipGeo, skinHighlightMat);
+    noseTip.position.set(0, -0.030, 0.150);
+    head.add(noseTip);
+
+    // Mouth
+    const mouthGeo = new THREE.BoxGeometry(0.042, 0.006, 0.012);
+    const mouth = new THREE.Mesh(mouthGeo, lipMat);
+    mouth.position.set(0, -0.070, 0.132);
+    head.add(mouth);
+
+    // ------------------------------------------------------------------------
+    // Tailored Hairstyle Construction (Complete 360° Coverage per NPC)
+    // ------------------------------------------------------------------------
+    const hairGroup = new THREE.Group();
+
+    // 1. Base Cranium Hair Cap (Full Coverage)
+    const hairCapGeo = new THREE.SphereGeometry(0.148, 22, 18);
+    const hairCap = new THREE.Mesh(hairCapGeo, hairMat);
+    hairCap.position.set(0, 0.020, -0.014);
+    hairCap.scale.set(0.97, 1.03, 1.01);
+    hairGroup.add(hairCap);
+
+    // 2. Full Back Skull & Nape Coverage
+    const backSkullGeo = new THREE.BoxGeometry(0.23, 0.17, 0.10);
+    const backSkull = new THREE.Mesh(backSkullGeo, hairMat);
+    backSkull.position.set(0, 0.010, -0.098);
+    hairGroup.add(backSkull);
+
+    const napeGeo = new THREE.BoxGeometry(0.18, 0.13, 0.08);
+    const nape = new THREE.Mesh(napeGeo, hairMat);
+    nape.position.set(0, -0.060, -0.078);
+    hairGroup.add(nape);
+
+    // 3. Symmetrical Side Hair Panels & Sideburns
+    const sideUpperGeo = new THREE.BoxGeometry(0.038, 0.13, 0.15);
+    const leftSide = new THREE.Mesh(sideUpperGeo, hairMat);
+    leftSide.position.set(-0.130, 0.030, -0.005);
+    leftSide.rotation.y = -0.12;
+    hairGroup.add(leftSide);
+
+    const rightSide = new THREE.Mesh(sideUpperGeo, hairMat);
+    rightSide.position.set(0.130, 0.030, -0.005);
+    rightSide.rotation.y = 0.12;
+    hairGroup.add(rightSide);
+
+    const sideburnGeo = new THREE.BoxGeometry(0.024, 0.10, 0.050);
+    const leftSideburn = new THREE.Mesh(sideburnGeo, hairMat);
+    leftSideburn.position.set(-0.134, -0.008, 0.018);
+    leftSideburn.rotation.y = -0.15;
+    hairGroup.add(leftSideburn);
+
+    const rightSideburn = new THREE.Mesh(sideburnGeo, hairMat);
+    rightSideburn.position.set(0.134, -0.008, 0.018);
+    rightSideburn.rotation.y = 0.15;
+    hairGroup.add(rightSideburn);
+
+    // 4. Character-Specific Hairstyle Silhouettes & Bangs
+    const hairlineArchGeo = new THREE.BoxGeometry(0.17, 0.032, 0.050);
+    const hairlineArch = new THREE.Mesh(hairlineArchGeo, hairMat);
+    hairlineArch.position.set(0, 0.090, 0.098);
+    hairGroup.add(hairlineArch);
+
+    if (config.id === 'npc_tanaka') {
+      // Mrs. Tanaka: Tidy mature wavy hair volume on crown & sides
+      const waveGeo = new THREE.SphereGeometry(0.065, 8, 8);
+      const topWave = new THREE.Mesh(waveGeo, hairHighlightMat);
+      topWave.position.set(0, 0.145, -0.010);
+      topWave.scale.set(1.2, 0.6, 1.1);
+      hairGroup.add(topWave);
+    } else if (config.id === 'npc_aoi') {
+      // Aoi: Chic stylish store bob with sleek bangs and temple frame locks
+      const bangGeo = new THREE.ConeGeometry(0.038, 0.080, 4);
+      const bang1 = new THREE.Mesh(bangGeo, hairMat);
+      bang1.position.set(-0.035, 0.110, 0.120);
+      bang1.rotation.set(-0.50, 0.15, -0.28);
+      hairGroup.add(bang1);
+
+      const bang2 = new THREE.Mesh(bangGeo, hairHighlightMat);
+      bang2.position.set(0.025, 0.112, 0.122);
+      bang2.rotation.set(-0.48, -0.15, 0.25);
+      hairGroup.add(bang2);
+    } else if (config.id === 'npc_kenji') {
+      // Kenji: Layered student crop with textured tufts
+      const tuftGeo = new THREE.ConeGeometry(0.048, 0.075, 4);
+      const tuft1 = new THREE.Mesh(tuftGeo, hairHighlightMat);
+      tuft1.position.set(-0.02, 0.155, 0.01);
+      tuft1.rotation.set(-0.25, 0.1, -0.15);
+      hairGroup.add(tuft1);
+
+      const tuft2 = new THREE.Mesh(tuftGeo, hairMat);
+      tuft2.position.set(0.04, 0.150, 0.02);
+      tuft2.rotation.set(-0.2, -0.2, 0.2);
+      hairGroup.add(tuft2);
+    } else if (config.id === 'npc_sato') {
+      // Mr. Sato: Neat professional part
+      const crownGeo = new THREE.BoxGeometry(0.20, 0.05, 0.18);
+      const crown = new THREE.Mesh(crownGeo, hairMat);
+      crown.position.set(0, 0.140, -0.010);
+      hairGroup.add(crown);
+    } else if (config.id === 'npc_yuka') {
+      // Yuka: Soft warm feminine bob with gentle volume
+      const waveGeo = new THREE.BoxGeometry(0.22, 0.06, 0.19);
+      const wave = new THREE.Mesh(waveGeo, hairHighlightMat);
+      wave.position.set(0, 0.142, -0.008);
+      hairGroup.add(wave);
+
+      const sideLockGeo = new THREE.BoxGeometry(0.032, 0.14, 0.06);
+      const leftLock = new THREE.Mesh(sideLockGeo, hairMat);
+      leftLock.position.set(-0.132, 0.015, 0.022);
+      hairGroup.add(leftLock);
+
+      const rightLock = new THREE.Mesh(sideLockGeo, hairMat);
+      rightLock.position.set(0.132, 0.015, 0.022);
+      hairGroup.add(rightLock);
+    } else if (config.id === 'npc_hiroshi') {
+      // Hiroshi: Sporty athletic textured crop
+      const sportGeo = new THREE.ConeGeometry(0.052, 0.075, 4);
+      const sportTuft = new THREE.Mesh(sportGeo, hairHighlightMat);
+      sportTuft.position.set(0, 0.155, 0.02);
+      sportTuft.rotation.set(-0.25, 0, 0);
+      hairGroup.add(sportTuft);
+    } else if (config.id === 'npc_takahashi') {
+      // Mr. Takahashi: Distinguished elder silver crop
+      const elderCapGeo = new THREE.BoxGeometry(0.21, 0.05, 0.18);
+      const elderCap = new THREE.Mesh(elderCapGeo, hairHighlightMat);
+      elderCap.position.set(0, 0.140, -0.010);
+      hairGroup.add(elderCap);
+    } else if (config.id === 'npc_sakura') {
+      // Sakura: Stylish layered photographer cut
+      const tuftGeo = new THREE.ConeGeometry(0.044, 0.080, 4);
+      const bang = new THREE.Mesh(tuftGeo, hairHighlightMat);
+      bang.position.set(-0.030, 0.112, 0.118);
+      bang.rotation.set(-0.50, 0.12, -0.25);
+      hairGroup.add(bang);
+    } else if (config.id === 'npc_daisuke') {
+      // Daisuke: Dynamic courier style
+      const tuftGeo = new THREE.ConeGeometry(0.046, 0.075, 4);
+      const tuft = new THREE.Mesh(tuftGeo, hairMat);
+      tuft.position.set(0.02, 0.152, 0.03);
+      tuft.rotation.set(-0.35, -0.1, 0.1);
+      hairGroup.add(tuft);
+    }
+
+    head.add(hairGroup);
     group.add(head);
 
-    const hairGeo = new THREE.DodecahedronGeometry(0.18, 1);
-    const hair = new THREE.Mesh(hairGeo, hairMat);
-    hair.position.set(0, 0.04, -0.02);
-    head.add(hair);
-
-    // 3. Articulated Limbs (Hip, Knee, and Shoulder Pivots)
+    // ========================================================================
+    // 4. ARTICULATED LIMBS (Hip, Knee, and Shoulder Pivots)
+    // ========================================================================
     const thighGeo = new THREE.BoxGeometry(0.14, 0.35, 0.15);
     const shinGeo = new THREE.BoxGeometry(0.13, 0.35, 0.14);
     const shoeGeo = new THREE.BoxGeometry(0.15, 0.10, 0.23);
@@ -385,19 +734,16 @@ export class NPCSystem {
     leftHip.position.set(-0.12, 0.76, 0);
     const leftThigh = new THREE.Mesh(thighGeo, pantsMat);
     leftThigh.position.y = -0.175;
-    leftThigh.castShadow = true;
     leftHip.add(leftThigh);
 
     const leftKnee = new THREE.Group();
     leftKnee.position.set(0, -0.35, 0);
     const leftShin = new THREE.Mesh(shinGeo, pantsMat);
     leftShin.position.y = -0.175;
-    leftShin.castShadow = true;
     leftKnee.add(leftShin);
 
     const leftShoe = new THREE.Mesh(shoeGeo, shoeMat);
     leftShoe.position.set(0, -0.35, 0.03);
-    leftShoe.castShadow = true;
     leftKnee.add(leftShoe);
 
     leftHip.add(leftKnee);
@@ -408,19 +754,16 @@ export class NPCSystem {
     rightHip.position.set(0.12, 0.76, 0);
     const rightThigh = new THREE.Mesh(thighGeo, pantsMat);
     rightThigh.position.y = -0.175;
-    rightThigh.castShadow = true;
     rightHip.add(rightThigh);
 
     const rightKnee = new THREE.Group();
     rightKnee.position.set(0, -0.35, 0);
     const rightShin = new THREE.Mesh(shinGeo, pantsMat);
     rightShin.position.y = -0.175;
-    rightShin.castShadow = true;
     rightKnee.add(rightShin);
 
     const rightShoe = new THREE.Mesh(shoeGeo, shoeMat);
     rightShoe.position.set(0, -0.35, 0.03);
-    rightShoe.castShadow = true;
     rightKnee.add(rightShoe);
 
     rightHip.add(rightKnee);
@@ -431,7 +774,6 @@ export class NPCSystem {
     leftShoulder.position.set(-0.28, 1.26, 0);
     const leftArm = new THREE.Mesh(armGeo, topMat);
     leftArm.position.y = -0.24;
-    leftArm.castShadow = true;
     leftShoulder.add(leftArm);
     group.add(leftShoulder);
 
@@ -440,7 +782,6 @@ export class NPCSystem {
     rightShoulder.position.set(0.28, 1.26, 0);
     const rightArm = new THREE.Mesh(armGeo, topMat);
     rightArm.position.y = -0.24;
-    rightArm.castShadow = true;
     rightShoulder.add(rightArm);
     group.add(rightShoulder);
 
@@ -483,7 +824,6 @@ export class NPCSystem {
       const caseMat = new THREE.MeshStandardMaterial({ color: 0x451a03 });
       briefcaseMesh = new THREE.Mesh(caseGeo, caseMat);
       briefcaseMesh.position.set(0, -0.28, 0);
-      briefcaseMesh.castShadow = true;
       rightShoulder.add(briefcaseMesh);
     } else if (config.id === 'npc_sakura') {
       const camGeo = new THREE.BoxGeometry(0.18, 0.12, 0.1);
@@ -503,9 +843,16 @@ export class NPCSystem {
       const bagMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
       const bag = new THREE.Mesh(bagGeo, bagMat);
       bag.position.set(0, 1.0, -0.18);
-      bag.castShadow = true;
       group.add(bag);
     }
+
+    // Enable cast and receive shadows on all NPC meshes
+    group.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
 
     const npcData = {
       group,
