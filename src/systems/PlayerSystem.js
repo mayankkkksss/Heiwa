@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { globalBus } from '../engine/EventBus.js';
 import { globalInput } from '../engine/InputManager.js';
 import { globalGameState, GameState } from '../engine/GameStateManager.js';
+import { getTerrainHeight } from '../utils/SeededRandom.js';
 
 /**
  * Polished Movement & Kinematic Configuration
@@ -1024,6 +1025,9 @@ export class PlayerSystem {
       }
     }
 
+    // Dynamic Authoritative Terrain Grounding
+    this.groundY = getTerrainHeight(this.position.x, this.position.z);
+
     // 1. Check Vertical Jump Input
     if (this.isGrounded && !this.isDialogueActive && globalInput.consumeJumpPress()) {
       this.isGrounded = false;
@@ -1052,10 +1056,14 @@ export class PlayerSystem {
         this.landingTimer = 0.22; // Brief landing compression window
         globalBus.emit('player:land');
       }
-    } else if (this.landingTimer > 0) {
-      this.landingTimer -= delta;
-      if (this.landingTimer <= 0) {
-        this.landingTimer = 0;
+    } else {
+      // Firmly adhere grounded player to terrain height
+      this.position.y = this.groundY;
+      if (this.landingTimer > 0) {
+        this.landingTimer -= delta;
+        if (this.landingTimer <= 0) {
+          this.landingTimer = 0;
+        }
       }
     }
 

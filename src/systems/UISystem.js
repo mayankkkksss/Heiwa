@@ -458,6 +458,30 @@ export class UISystem {
     ctx.fillRect(toMapX(-65), toMapY(-41.5), 65 * scale, 7.0 * scale); // West residential lane
     ctx.fillRect(toMapX(0), toMapY(38.5), 65 * scale, 7.5 * scale);    // South commercial lane
 
+    // Procedural Road Network from active streamed chunks
+    const streamingSys = this.engine?.systems?.find((s) => s.constructor.name === 'WorldStreamingSystem');
+    if (streamingSys && streamingSys.activeChunks) {
+      ctx.fillStyle = 'rgba(100, 116, 139, 0.38)';
+      for (const chunk of streamingSys.activeChunks.values()) {
+        if (chunk.isAuthored || !chunk.roads) continue;
+        for (const r of chunk.roads) {
+          if (r.type === 'NS') {
+            const rx = toMapX(r.startX - r.width / 2);
+            const ry = toMapY(r.startZ);
+            const rw = r.width * scale;
+            const rh = (r.endZ - r.startZ) * scale;
+            ctx.fillRect(rx, ry, rw, rh);
+          } else if (r.type === 'EW') {
+            const rx = toMapX(r.startX);
+            const ry = toMapY(r.startZ - r.width / 2);
+            const rw = (r.endX - r.startX) * scale;
+            const rh = r.width * scale;
+            ctx.fillRect(rx, ry, rw, rh);
+          }
+        }
+      }
+    }
+
     // 4. District Buildings (Clean Footprints)
     const buildings = [
       // Sakura Heights Apartment (Player Home)
@@ -499,6 +523,27 @@ export class UISystem {
       }
     });
 
+    // Procedural Buildings from active streamed chunks
+    if (streamingSys && streamingSys.activeChunks) {
+      for (const chunk of streamingSys.activeChunks.values()) {
+        if (chunk.isAuthored || !chunk.colliders) continue;
+        for (const col of chunk.colliders) {
+          if (col.category === 'building' && col.type === 'box') {
+            const bx = toMapX(col.minX);
+            const by = toMapY(col.minZ);
+            const bw = (col.maxX - col.minX) * scale;
+            const bh = (col.maxZ - col.minZ) * scale;
+
+            ctx.fillStyle = 'rgba(203, 213, 225, 0.22)';
+            ctx.fillRect(bx, by, bw, bh);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1.0;
+            ctx.strokeRect(bx, by, bw, bh);
+          }
+        }
+      }
+    }
+
     // 5. Interactive Landmarks & POIs
     const landmarks = [
       { x: -28, z: -38, color: '#f472b6', name: 'Home', icon: '🏠' },
@@ -531,6 +576,44 @@ export class UISystem {
         ctx.fillText(lm.name, lx, ly - 7);
       }
     });
+
+    // 5b. Procedural World Exploration Landmarks & Destinations
+    if (streamingSys && streamingSys.activeChunks) {
+      for (const chunk of streamingSys.activeChunks.values()) {
+        if (!chunk.destination) continue;
+        const dest = chunk.destination;
+        const dx = toMapX(dest.x);
+        const dy = toMapY(dest.z);
+        const isDiscovered = streamingSys.isDestinationDiscovered ? streamingSys.isDestinationDiscovered(dest.name) : false;
+
+        // Outer beacon ring
+        ctx.fillStyle = `${dest.color || '#38bdf8'}33`;
+        ctx.beginPath();
+        ctx.arc(dx, dy, isExpanded ? 9 : 5.0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Core marker
+        ctx.fillStyle = dest.color || '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(dx, dy, isExpanded ? 4.0 : 2.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // White center dot for discovered destinations
+        if (isDiscovered) {
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(dx, dy, isExpanded ? 1.6 : 1.0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (isExpanded) {
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = '600 8.5px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(dest.name, dx, dy - 8);
+        }
+      }
+    }
 
     // 6. Dynamic NPC Positions (Real-time active neighborhood markers)
     const npcSys = this.engine?.systems?.find((s) => s.constructor.name === 'NPCSystem');

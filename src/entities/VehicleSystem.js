@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { globalBus } from '../engine/EventBus.js';
 import { globalGameState, GameState } from '../engine/GameStateManager.js';
 import { globalInput } from '../engine/InputManager.js';
+import { getTerrainHeight, HEIWA_WORLD_SEED } from '../utils/SeededRandom.js';
 
 export const VehicleState = {
   ON_FOOT: 'ON_FOOT',
@@ -17,8 +18,8 @@ export const VehicleState = {
 
 /**
  * VehicleSystem - Implements Mayank's personal compact Japanese commuter car,
- * kinematic driving physics, multi-touch/keyboard controls, collision resolution,
- * and seamless entry/exit lifecycle.
+ * kinematic driving physics, multi-touch/keyboard controls, multi-point ground probing,
+ * collision resolution, and seamless entry/exit lifecycle.
  */
 export class VehicleSystem {
   constructor() {
@@ -32,16 +33,20 @@ export class VehicleSystem {
     this.position = new THREE.Vector3(-20.0, 0, -46.5); // Parked on residential street near Home
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.speed = 0;
-    this.maxSpeed = 15.0; // ~54 km/h (peaceful & responsive neighborhood driving)
-    this.maxReverseSpeed = -4.5;
-    this.acceleration = 6.8;
-    this.brakeForce = 12.0;
-    this.friction = 3.2;
+    this.maxSpeed = 14.0; // ~50 km/h (lightweight compact Japanese commuter car)
+    this.maxReverseSpeed = -4.2; // ~15 km/h reverse
+    this.acceleration = 6.5; // Smooth realistic commuter acceleration
+    this.brakeForce = 14.0; // Responsive stopping brake
+    this.friction = 3.0; // Natural rolling resistance
+    this.handbrakeForce = 24.0; // Strong controlled handbrake
 
     this.headingAngle = Math.PI / 2; // Facing East along street
     this.steerAngle = 0;
-    this.maxSteerAngle = 0.52; // ~30 degrees
+    this.maxSteerAngle = 0.50; // ~28.6 degrees
     this.wheelbase = 2.4;
+    this.trackWidth = 1.52;
+    this.terrainPitch = 0;
+    this.terrainRoll = 0;
 
     // Visual Mesh & parts
     this.mesh = null;
@@ -57,7 +62,7 @@ export class VehicleSystem {
     this.carWidth = 1.62;
     this.carLength = 3.55;
     this.carHeight = 1.48;
-    this.collisionRadius = 0.95;
+    this.collisionRadius = 0.85;
   }
 
   get carGroup() {
@@ -100,7 +105,7 @@ export class VehicleSystem {
     const leftOffset = new THREE.Vector3(-1.35, 0, 0.2);
     leftOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.headingAngle);
     const candidate = this.position.clone().add(leftOffset);
-    candidate.y = 0;
+    candidate.y = getTerrainHeight(candidate.x, candidate.z);
 
     if (!this.worldSystem || !this.worldSystem.checkCollision(candidate.x, candidate.z, 0.4)) {
       return targetVec.copy(candidate);
@@ -110,7 +115,7 @@ export class VehicleSystem {
     const rightOffset = new THREE.Vector3(1.35, 0, 0.2);
     rightOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.headingAngle);
     candidate.copy(this.position).add(rightOffset);
-    candidate.y = 0;
+    candidate.y = getTerrainHeight(candidate.x, candidate.z);
 
     if (!this.worldSystem || !this.worldSystem.checkCollision(candidate.x, candidate.z, 0.4)) {
       return targetVec.copy(candidate);
@@ -120,24 +125,60 @@ export class VehicleSystem {
     const rearOffset = new THREE.Vector3(0, 0, -2.4);
     rearOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.headingAngle);
     candidate.copy(this.position).add(rearOffset);
-    candidate.y = 0;
+    candidate.y = getTerrainHeight(candidate.x, candidate.z);
     return targetVec.copy(candidate);
   }
 
+  /**
+   * Multi-point collision envelope testing car center and front/rear bumpers
+   */
+  checkCarCollisionAt(x, z, heading) {
+    if (!this.worldSystem || typeof this.worldSystem.checkCollision !== 'function') {
+      return false;
+    }
+
+    // 1. Center envelope
+    if (this.worldSystem.checkCollision(x, z, 0.78)) {
+      return true;
+    }
+
+    // 2. Front bumper envelope (+1.20m along heading)
+    const fX = x + Math.sin(heading) * 1.20;
+    const fZ = z + Math.cos(heading) * 1.20;
+    if (this.worldSystem.checkCollision(fX, fZ, 0.54)) {
+      return true;
+    }
+
+    // 3. Rear bumper envelope (-1.20m along heading)
+    const rX = x - Math.sin(heading) * 1.20;
+    const rZ = z - Math.cos(heading) * 1.20;
+    if (this.worldSystem.checkCollision(rX, rZ, 0.54)) {
+      return true;
+    }
+
+    return false;
+  }
+
   drive(throttle = 0, steer = 0, isHandbrake = false, delta = 0.016) {
+    // 1. Acceleration / Active Braking / Rolling Friction
     if (throttle > 0) {
-      if (this.speed < 0) {
+      if (this.speed < -0.15) {
+        // Active braking from reverse
         this.speed = Math.min(0, this.speed + this.brakeForce * delta);
       } else {
+        // Forward acceleration
         this.speed = Math.min(this.maxSpeed, this.speed + this.acceleration * throttle * delta);
       }
     } else if (throttle < 0) {
-      if (this.speed > 0) {
+      if (this.speed > 0.15) {
+        // Active braking when driving forward (S key brakes first)
         this.speed = Math.max(0, this.speed - this.brakeForce * Math.abs(throttle) * delta);
       } else {
-        this.speed = Math.max(this.maxReverseSpeed, this.speed - this.acceleration * 0.6 * Math.abs(throttle) * delta);
+        // Transition to reverse only when stopped or nearly stopped
+        this.speed = Math.max(this.maxReverseSpeed, this.speed - this.acceleration * 0.65 * Math.abs(throttle) * delta);
       }
     } else {
+      // Natural rolling friction deceleration
       if (this.speed > 0) {
         this.speed = Math.max(0, this.speed - this.friction * delta);
       } else if (this.speed < 0) {
@@ -145,25 +186,33 @@ export class VehicleSystem {
       }
     }
 
+    // Handbrake application (Space)
     if (isHandbrake) {
       if (this.speed > 0) {
-        this.speed = Math.max(0, this.speed - this.brakeForce * 1.8 * delta);
+        this.speed = Math.max(0, this.speed - this.handbrakeForce * delta);
       } else if (this.speed < 0) {
-        this.speed = Math.min(0, this.speed + this.brakeForce * 1.8 * delta);
+        this.speed = Math.min(0, this.speed + this.handbrakeForce * delta);
       }
     }
 
+    // 2. Speed-Dependent Steering Sensitivity Curve
+    const absSpeed = Math.abs(this.speed);
+    const speedRatio = Math.min(1.0, absSpeed / 12.0);
+    const dynamicMaxSteer = THREE.MathUtils.lerp(this.maxSteerAngle, this.maxSteerAngle * 0.55, speedRatio);
+
     if (Math.abs(steer) > 0.01) {
-      this.steerAngle = steer * this.maxSteerAngle;
+      this.steerAngle = steer * dynamicMaxSteer;
     } else {
       this.steerAngle = 0;
     }
 
-    if (Math.abs(this.speed) > 0.05) {
+    // 3. Kinematic Turning (turning along forward direction)
+    if (absSpeed > 0.05) {
       const turnRate = (this.speed / this.wheelbase) * Math.sin(this.steerAngle);
       this.headingAngle += turnRate * delta;
     }
 
+    // 4. Proposed Movement & Collision Resolution with Axis Sliding
     const moveDist = this.speed * delta;
     const forwardX = Math.sin(this.headingAngle);
     const forwardZ = Math.cos(this.headingAngle);
@@ -174,10 +223,22 @@ export class VehicleSystem {
     let nextX = this.position.x + deltaX;
     let nextZ = this.position.z + deltaZ;
 
-    if (this.worldSystem && typeof this.worldSystem.checkCollision === 'function') {
-      const hasCollision = this.worldSystem.checkCollision(nextX, nextZ, this.collisionRadius);
-      if (hasCollision) {
-        this.speed = -this.speed * 0.25;
+    if (this.checkCarCollisionAt(nextX, nextZ, this.headingAngle)) {
+      // Test sliding along X axis (sliding along N-S wall)
+      if (!this.checkCarCollisionAt(this.position.x + deltaX, this.position.z, this.headingAngle)) {
+        nextX = this.position.x + deltaX;
+        nextZ = this.position.z;
+        this.speed *= 0.94; // Light friction on slide
+      }
+      // Test sliding along Z axis (sliding along E-W wall)
+      else if (!this.checkCarCollisionAt(this.position.x, this.position.z + deltaZ, this.headingAngle)) {
+        nextX = this.position.x;
+        nextZ = this.position.z + deltaZ;
+        this.speed *= 0.94; // Light friction on slide
+      }
+      // Direct solid impact: stop penetration
+      else {
+        this.speed = -this.speed * 0.15;
         nextX = this.position.x;
         nextZ = this.position.z;
       }
@@ -186,12 +247,68 @@ export class VehicleSystem {
     this.position.x = nextX;
     this.position.z = nextZ;
 
+    // Apply multi-point ground probing
+    this.updateGrounding(delta);
+
     if (this.mesh) {
       this.mesh.position.copy(this.position);
-      this.mesh.rotation.y = this.headingAngle;
+      this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, -(this.terrainRoll || 0), 'YXZ');
     }
 
     this.velocity.set(forwardX * this.speed, 0, forwardZ * this.speed);
+  }
+
+  /**
+   * Continuous multi-point ground probing (FL, FR, RL, RR) using authoritative getTerrainHeight.
+   * Resolves vehicle elevation, longitudinal pitch, and lateral roll with zero floating gap.
+   */
+  updateGrounding(delta = 0.016) {
+    const cosH = Math.cos(this.headingAngle);
+    const sinH = Math.sin(this.headingAngle);
+
+    // Transform probe coordinates to global world space
+    const transformProbe = (localX, localZ) => ({
+      x: this.position.x + (cosH * localX + sinH * localZ),
+      z: this.position.z + (-sinH * localX + cosH * localZ),
+    });
+
+    const fl = transformProbe(-0.76, 1.15);
+    const fr = transformProbe(0.76, 1.15);
+    const rl = transformProbe(-0.76, -1.15);
+    const rr = transformProbe(0.76, -1.15);
+
+    const hFL = getTerrainHeight(fl.x, fl.z);
+    const hFR = getTerrainHeight(fr.x, fr.z);
+    const hRL = getTerrainHeight(rl.x, rl.z);
+    const hRR = getTerrainHeight(rr.x, rr.z);
+
+    const targetGroundY = (hFL + hFR + hRL + hRR) / 4.0;
+
+    // Fast responsive vertical grounding (prevents floating while smoothing high-frequency road bumps)
+    if (delta >= 0.5) {
+      this.position.y = targetGroundY;
+    } else {
+      this.position.y = THREE.MathUtils.lerp(this.position.y, targetGroundY, Math.min(1, 25.0 * delta));
+    }
+
+    // Dynamic terrain pitch and roll from 4-point elevation differentials
+    const frontH = (hFL + hFR) / 2.0;
+    const rearH = (hRL + hRR) / 2.0;
+    const leftH = (hFL + hRL) / 2.0;
+    const rightH = (hFR + hRR) / 2.0;
+
+    this.terrainPitch = THREE.MathUtils.clamp((frontH - rearH) / this.wheelbase, -0.22, 0.22);
+    this.terrainRoll = THREE.MathUtils.clamp((rightH - leftH) / this.trackWidth, -0.18, 0.18);
+
+    return {
+      targetGroundY,
+      hFL,
+      hFR,
+      hRL,
+      hRR,
+      terrainPitch: this.terrainPitch,
+      terrainRoll: this.terrainRoll,
+    };
   }
 
   init(engine) {
@@ -200,6 +317,11 @@ export class VehicleSystem {
     this.worldSystem = engine.systems.find((s) => typeof s.checkCollision === 'function');
 
     this.createVehicleMesh();
+    this.updateGrounding(1.0); // Immediate initial ground snap
+    if (this.mesh) {
+      this.mesh.position.copy(this.position);
+      this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, -(this.terrainRoll || 0), 'YXZ');
+    }
     this.scene.add(this.mesh);
 
     // Register car and driver anchor as interactive targets with InteractionSystem
@@ -473,18 +595,19 @@ export class VehicleSystem {
     }
 
     if (throttle > 0) {
-      if (this.speed < 0) {
+      if (this.speed < -0.15) {
         // Active braking from reverse
         this.speed = Math.min(0, this.speed + this.brakeForce * delta);
       } else {
         this.speed = Math.min(this.maxSpeed, this.speed + this.acceleration * throttle * delta);
       }
     } else if (throttle < 0) {
-      if (this.speed > 0) {
-        // Active braking from forward
+      if (this.speed > 0.15) {
+        // Active braking when driving forward (S key brakes first)
         this.speed = Math.max(0, this.speed - this.brakeForce * Math.abs(throttle) * delta);
       } else {
-        this.speed = Math.max(this.maxReverseSpeed, this.speed - this.acceleration * 0.6 * Math.abs(throttle) * delta);
+        // Transition to reverse only when stopped or nearly stopped
+        this.speed = Math.max(this.maxReverseSpeed, this.speed - this.acceleration * 0.65 * Math.abs(throttle) * delta);
       }
     } else {
       // Natural rolling friction deceleration
@@ -495,32 +618,34 @@ export class VehicleSystem {
       }
     }
 
+    // Handbrake application (Space)
     if (isHandbrake) {
       if (this.speed > 0) {
-        this.speed = Math.max(0, this.speed - this.brakeForce * 1.8 * delta);
+        this.speed = Math.max(0, this.speed - this.handbrakeForce * delta);
       } else if (this.speed < 0) {
-        this.speed = Math.min(0, this.speed + this.brakeForce * 1.8 * delta);
+        this.speed = Math.min(0, this.speed + this.handbrakeForce * delta);
       }
     }
 
-    // 2. Steering with speed-sensitive stability curve
-    const speedRatio = Math.min(1.0, Math.abs(this.speed) / 10.0);
-    const targetSteerMax = THREE.MathUtils.lerp(this.maxSteerAngle, this.maxSteerAngle * 0.45, speedRatio);
+    // 2. Speed-Dependent Steering Sensitivity Curve
+    const absSpeed = Math.abs(this.speed);
+    const speedRatio = Math.min(1.0, absSpeed / 12.0);
+    const dynamicMaxSteer = THREE.MathUtils.lerp(this.maxSteerAngle, this.maxSteerAngle * 0.55, speedRatio);
 
     // input.x < 0 is Left (A key), input.x > 0 is Right (D key)
     let targetSteer = 0;
     if (Math.abs(input.x) > 0.05) {
-      targetSteer = -input.x * targetSteerMax; // Left steering turns positive heading
+      targetSteer = -input.x * dynamicMaxSteer; // Left steering turns positive heading
     }
     this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, targetSteer, Math.min(1, 12.0 * delta));
 
     // 3. Kinematic Bicycle Turning Model
-    if (Math.abs(this.speed) > 0.05) {
+    if (absSpeed > 0.05) {
       const turnRate = (this.speed / this.wheelbase) * Math.sin(this.steerAngle);
       this.headingAngle += turnRate * delta;
     }
 
-    // 4. Proposed Position Update & Collision Resolution
+    // 4. Proposed Position Update & Collision Resolution with Axis Sliding
     const moveDist = this.speed * delta;
     const forwardX = Math.sin(this.headingAngle);
     const forwardZ = Math.cos(this.headingAngle);
@@ -531,12 +656,22 @@ export class VehicleSystem {
     let nextX = this.position.x + deltaX;
     let nextZ = this.position.z + deltaZ;
 
-    // Check collision against solid world instances
-    if (this.worldSystem && typeof this.worldSystem.checkCollision === 'function') {
-      const hasCollision = this.worldSystem.checkCollision(nextX, nextZ, this.collisionRadius);
-      if (hasCollision) {
-        // Car bumper obstruction: halt forward velocity on solid collision
-        this.speed = -this.speed * 0.25; // Gentle bounce
+    if (this.checkCarCollisionAt(nextX, nextZ, this.headingAngle)) {
+      // Test sliding along X axis (sliding along N-S wall)
+      if (!this.checkCarCollisionAt(this.position.x + deltaX, this.position.z, this.headingAngle)) {
+        nextX = this.position.x + deltaX;
+        nextZ = this.position.z;
+        this.speed *= 0.94; // Light friction on slide
+      }
+      // Test sliding along Z axis (sliding along E-W wall)
+      else if (!this.checkCarCollisionAt(this.position.x, this.position.z + deltaZ, this.headingAngle)) {
+        nextX = this.position.x;
+        nextZ = this.position.z + deltaZ;
+        this.speed *= 0.94; // Light friction on slide
+      }
+      // Direct solid impact: stop penetration
+      else {
+        this.speed = -this.speed * 0.15; // Soft bumper bounce
         nextX = this.position.x;
         nextZ = this.position.z;
       }
@@ -545,9 +680,11 @@ export class VehicleSystem {
     this.position.x = nextX;
     this.position.z = nextZ;
 
-    // 5. Update Visual Wheel & Chassis Transforms
+    // 5. Update Multi-Point Grounding, Elevation & Pitch/Roll
+    this.updateGrounding(delta);
+
     this.mesh.position.copy(this.position);
-    this.mesh.rotation.y = this.headingAngle;
+    this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, -(this.terrainRoll || 0), 'YXZ');
 
     // Wheel spin & front steering
     this.wheelAngle += (this.speed / 0.32) * delta;
@@ -590,5 +727,20 @@ export class VehicleSystem {
       headingAngle: this.headingAngle,
       isMoving: Math.abs(this.speed) > 0.2,
     });
+  }
+
+  /**
+   * Diagnostic summary for development and test harnesses
+   */
+  getDebugInfo() {
+    return {
+      state: this.state,
+      speed: this.speed,
+      maxSpeed: this.maxSpeed,
+      position: { x: this.position.x, y: this.position.y, z: this.position.z },
+      headingAngle: this.headingAngle,
+      forward: { x: Math.sin(this.headingAngle), z: Math.cos(this.headingAngle) },
+      steerAngle: this.steerAngle,
+    };
   }
 }
