@@ -125,13 +125,57 @@ export class CameraSystem {
 
     globalBus.on('state:changed', (data) => {
       if (data.to === GameState.PLAYING) {
-        this.theta = 0;
-        this.phi = 0.24;
+        if (!this.isRestoredFromSave) {
+          this.theta = 0;
+          this.phi = 0.24;
+        }
+        this.isRestoredFromSave = false;
         this.smoothedTarget.copy(this.target);
         this.mouseInactiveTimer = CAMERA_CONFIG.CAMERA_RECENTER_DELAY;
         this.updateCameraInstant();
       }
     });
+  }
+
+  getStateForSave() {
+    return {
+      theta: this.theta,
+      phi: this.phi,
+      isVehicleMode: this.isVehicleMode,
+    };
+  }
+
+  restoreState(data, focusPos) {
+    if (!data) return;
+    if (typeof data.theta === 'number' && isFinite(data.theta)) {
+      this.theta = data.theta;
+    }
+    if (typeof data.phi === 'number' && isFinite(data.phi)) {
+      this.phi = THREE.MathUtils.clamp(data.phi, CAMERA_CONFIG.CAMERA_PITCH_MIN, CAMERA_CONFIG.CAMERA_PITCH_MAX);
+    }
+    this.isVehicleMode = !!data.isVehicleMode;
+    this.desiredDistance = this.isVehicleMode ? 6.2 : CAMERA_CONFIG.CAMERA_DISTANCE;
+    this.currentDistance = this.desiredDistance;
+
+    if (focusPos) {
+      this.target.set(focusPos.x, focusPos.y + (this.isVehicleMode ? 1.65 : CAMERA_CONFIG.CAMERA_HEIGHT), focusPos.z);
+      this.smoothedTarget.copy(this.target);
+    }
+
+    this.isRestoredFromSave = true;
+    this.updateCameraInstant();
+  }
+
+  resetCamera() {
+    this.target.set(-24.0, CAMERA_CONFIG.CAMERA_HEIGHT, -46.5);
+    this.smoothedTarget.copy(this.target);
+    this.theta = 0;
+    this.phi = 0.24;
+    this.isVehicleMode = false;
+    this.desiredDistance = CAMERA_CONFIG.CAMERA_DISTANCE;
+    this.currentDistance = CAMERA_CONFIG.CAMERA_DISTANCE;
+    this.isRestoredFromSave = false;
+    this.updateCameraInstant();
   }
 
   clampAngles() {

@@ -184,6 +184,7 @@
               <button id="btn-pause-resume" class="btn-pause primary">Resume Game</button>
               <button id="btn-pause-audio" class="btn-pause">Ambience: On 🔊</button>
               <button id="btn-pause-controls" class="btn-pause">Controls Guide</button>
+              <button id="btn-pause-settings" class="btn-pause">Settings & Auto-Save</button>
               <button id="btn-pause-quit" class="btn-pause danger">Return to Title Screen</button>
             </div>
           </div>
@@ -198,6 +199,22 @@
             </div>
             <div id="info-modal-body" class="info-body">
               <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 7. CONFIRMATION DIALOG MODAL -->
+        <div id="confirm-modal" class="confirm-modal hidden">
+          <div class="confirm-card">
+            <div class="confirm-header">
+              <h3 id="confirm-modal-title">Reset Game?</h3>
+            </div>
+            <div id="confirm-modal-body" class="confirm-body">
+              Your saved progress will be permanently deleted.
+            </div>
+            <div class="confirm-actions">
+              <button id="btn-confirm-cancel" class="btn-confirm secondary">Cancel</button>
+              <button id="btn-confirm-accept" class="btn-confirm danger">Reset</button>
             </div>
           </div>
         </div>

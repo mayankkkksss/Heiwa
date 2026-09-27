@@ -147,8 +147,13 @@ export class InputManager {
         this.keys.set('Space', true);
       }
 
-      // Handle Escape: prioritize info modal dismissal, then dialogue dismissal, then bench standup, then pause toggle
+      // Handle Escape: prioritize confirm modal dismissal, then info modal dismissal, then dialogue dismissal, then bench standup, then pause toggle
       if (e.code === 'Escape' || e.key === 'Escape') {
+        const confirmModal = document.getElementById('confirm-modal');
+        if (confirmModal && !confirmModal.classList.contains('hidden')) {
+          globalBus.emit('ui:closeConfirmModal');
+          return;
+        }
         const infoModal = document.getElementById('info-modal');
         if (infoModal && !infoModal.classList.contains('hidden')) {
           globalBus.emit('ui:closeInfoModal');

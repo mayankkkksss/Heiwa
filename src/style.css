@@ -899,8 +899,116 @@ html, body {
   line-height: 1.6;
 }
 
+.btn-reset-game {
+  margin-top: 0.5rem;
+  align-self: flex-start;
+  background: rgba(239, 68, 68, 0.16);
+  border: 1px solid rgba(239, 68, 68, 0.38);
+  color: #fca5a5;
+  padding: 0.45rem 1.0rem;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-reset-game:hover {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: rgba(239, 68, 68, 0.65);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
 /* -------------------------------------------------------------
-   7. TOAST NOTIFICATIONS
+   7. CONFIRMATION MODAL (High-Priority Modal Dialog Layer)
+   ------------------------------------------------------------- */
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(11, 15, 23, 0.92);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 600;
+  pointer-events: auto;
+  padding: 1.5rem;
+}
+
+.confirm-card {
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  padding: 1.6rem 1.8rem;
+  width: min(400px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 1.0rem;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.85);
+  pointer-events: auto;
+}
+
+.confirm-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.confirm-body {
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.4rem;
+}
+
+.btn-confirm {
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-confirm.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e2e8f0;
+}
+
+.btn-confirm.secondary:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.btn-confirm.danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+}
+
+.btn-confirm.danger:hover {
+  background: linear-gradient(135deg, #f87171, #ef4444);
+  box-shadow: 0 6px 18px rgba(239, 68, 68, 0.55);
+  transform: translateY(-1px);
+}
+
+/* -------------------------------------------------------------
+   8. TOAST NOTIFICATIONS
    ------------------------------------------------------------- */
 .toast-container {
   position: absolute;

@@ -285,6 +285,53 @@ export class PlayerSystem {
     globalBus.emit('player:spawned', { position: this.position });
   }
 
+  getStateForSave() {
+    return {
+      position: { x: this.position.x, y: this.position.y, z: this.position.z },
+      headingAngle: this.headingAngle,
+      isInVehicle: this.isInVehicle,
+      movementState: this.movementState,
+    };
+  }
+
+  restoreState(data) {
+    if (!data) return;
+    this.isSitting = false;
+    this.isDialogueActive = false;
+
+    if (data.position) {
+      this.position.set(data.position.x, data.position.y ?? 0, data.position.z);
+      if (this.mesh) {
+        this.mesh.position.copy(this.position);
+      }
+    }
+    if (typeof data.headingAngle === 'number') {
+      this.headingAngle = data.headingAngle;
+      this.targetHeadingAngle = data.headingAngle;
+      if (this.mesh) {
+        this.mesh.rotation.y = this.headingAngle;
+      }
+    }
+    this.isInVehicle = !!data.isInVehicle;
+    if (this.mesh) {
+      this.mesh.visible = !this.isInVehicle;
+    }
+    this.velocity.set(0, 0, 0);
+    this.verticalVelocity = 0;
+    this.isGrounded = true;
+    this.movementState = data.movementState || 'IDLE';
+
+    globalBus.emit('player:spawned', { position: this.position });
+    globalBus.emit('player:moved', {
+      position: this.position,
+      headingAngle: this.headingAngle,
+      isMoving: false,
+      isJogging: false,
+      isGrounded: true,
+      speed: 0,
+    });
+  }
+
   createMayankCharacter() {
     const playerGroup = new THREE.Group();
     playerGroup.position.copy(this.position);
@@ -1318,4 +1365,70 @@ export class PlayerSystem {
     this.limbs.torso.position.y = baseTorsoY;
     this.limbs.head.position.y = baseHeadY;
   }
+
+  getStateForSave() {
+    return {
+      position: {
+        x: this.position.x,
+        y: this.position.y,
+        z: this.position.z,
+      },
+      headingAngle: this.headingAngle,
+      movementState: this.movementState,
+    };
+  }
+
+  restoreState(data) {
+    if (!data || !data.position) return;
+    const px = typeof data.position.x === 'number' && !isNaN(data.position.x) ? data.position.x : this.spawnPosition.x;
+    const py = typeof data.position.y === 'number' && !isNaN(data.position.y) ? data.position.y : 0;
+    const pz = typeof data.position.z === 'number' && !isNaN(data.position.z) ? data.position.z : this.spawnPosition.z;
+
+    this.position.set(px, py, pz);
+    if (this.mesh) {
+      this.mesh.position.copy(this.position);
+    }
+
+    if (typeof data.headingAngle === 'number' && !isNaN(data.headingAngle)) {
+      this.headingAngle = data.headingAngle;
+      this.targetHeadingAngle = data.headingAngle;
+      if (this.mesh) {
+        this.mesh.rotation.y = this.headingAngle;
+      }
+    }
+
+    this.velocity.set(0, 0, 0);
+    this.verticalVelocity = 0;
+    this.isGrounded = true;
+
+    globalBus.emit('player:moved', {
+      position: this.position.clone(),
+      headingAngle: this.headingAngle,
+      isMoving: false,
+      isJogging: false,
+      movementState: 'IDLE',
+    });
+  }
+
+  resetToSpawn() {
+    this.position.copy(this.spawnPosition);
+    if (this.mesh) {
+      this.mesh.position.copy(this.position);
+    }
+    this.headingAngle = 0;
+    this.targetHeadingAngle = 0;
+    if (this.mesh) {
+      this.mesh.rotation.y = 0;
+    }
+    this.velocity.set(0, 0, 0);
+    this.verticalVelocity = 0;
+    this.isGrounded = true;
+    this.movementState = 'IDLE';
+
+    globalBus.emit('player:spawned', {
+      position: this.position.clone(),
+      headingAngle: 0,
+    });
+  }
 }
+

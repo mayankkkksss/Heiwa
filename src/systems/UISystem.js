@@ -64,12 +64,20 @@ export class UISystem {
       btnPauseResume: document.getElementById('btn-pause-resume'),
       btnPauseAudio: document.getElementById('btn-pause-audio'),
       btnPauseControls: document.getElementById('btn-pause-controls'),
+      btnPauseSettings: document.getElementById('btn-pause-settings'),
       btnPauseQuit: document.getElementById('btn-pause-quit'),
 
       // Info Modal
       infoModalTitle: document.getElementById('info-modal-title'),
       infoModalBody: document.getElementById('info-modal-body'),
       btnInfoClose: document.getElementById('btn-info-close'),
+
+      // Confirmation Modal
+      confirmModal: document.getElementById('confirm-modal'),
+      confirmModalTitle: document.getElementById('confirm-modal-title'),
+      confirmModalBody: document.getElementById('confirm-modal-body'),
+      btnConfirmCancel: document.getElementById('btn-confirm-cancel'),
+      btnConfirmAccept: document.getElementById('btn-confirm-accept'),
 
       toastContainer: document.getElementById('toast-container'),
     };
@@ -86,22 +94,7 @@ export class UISystem {
     if (this.dom.btnSettings) {
       this.dom.btnSettings.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.openInfoModal('Settings', `
-          <div class="settings-list">
-            <div class="settings-item">
-              <div class="settings-label">Audio Ambience</div>
-              <div class="settings-desc">Environmental breeze, birds, and peaceful neighborhood soundscapes.</div>
-            </div>
-            <div class="settings-item">
-              <div class="settings-label">Camera Sensitivity</div>
-              <div class="settings-desc">Smooth orbital dampening and responsive third-person follow.</div>
-            </div>
-            <div class="settings-item">
-              <div class="settings-label">Performance</div>
-              <div class="settings-desc">Hardware acceleration active with optimized WebGL rendering.</div>
-            </div>
-          </div>
-        `, this.dom.btnSettings);
+        this.openSettingsModal(this.dom.btnSettings);
       });
     }
 
@@ -130,6 +123,33 @@ export class UISystem {
         // Clicking the backdrop outside info-card closes modal
         if (e.target === this.dom.infoModal) {
           this.closeInfoModal();
+        }
+      });
+    }
+
+    // Confirmation Modal Actions
+    if (this.dom.btnConfirmCancel) {
+      this.dom.btnConfirmCancel.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeConfirmModal();
+      });
+    }
+
+    if (this.dom.btnConfirmAccept) {
+      this.dom.btnConfirmAccept.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof this.confirmCallback === 'function') {
+          const cb = this.confirmCallback;
+          this.confirmCallback = null;
+          cb();
+        }
+      });
+    }
+
+    if (this.dom.confirmModal) {
+      this.dom.confirmModal.addEventListener('click', (e) => {
+        if (e.target === this.dom.confirmModal) {
+          this.closeConfirmModal();
         }
       });
     }
@@ -189,7 +209,13 @@ export class UISystem {
             <div><strong>[M]</strong> — Toggle Minimap</div>
             <div><strong>[T]</strong> — Advance Time of Day</div>
           </div>
-        `);
+        `, this.dom.btnPauseControls);
+      });
+    }
+
+    if (this.dom.btnPauseSettings) {
+      this.dom.btnPauseSettings.addEventListener('click', () => {
+        this.openSettingsModal(this.dom.btnPauseSettings);
       });
     }
 
@@ -308,6 +334,24 @@ export class UISystem {
 
     globalBus.on('ui:closeInfoModal', () => {
       this.closeInfoModal(false);
+    });
+
+    globalBus.on('ui:closeConfirmModal', () => {
+      this.closeConfirmModal(false);
+    });
+
+    globalBus.on('ui:openConfirmModal', (data) => {
+      if (data) {
+        this.openConfirmModal(data.title, data.message, data.onConfirm);
+      }
+    });
+
+    globalBus.on('save:completed', () => {
+      // Unobtrusive update
+      const statusEl = document.getElementById('save-status-indicator');
+      if (statusEl) {
+        statusEl.textContent = 'Saved just now';
+      }
     });
   }
 
@@ -739,6 +783,81 @@ export class UISystem {
     }
   }
 
+  openSettingsModal(openerBtn = null) {
+    const content = `
+      <div class="settings-content settings-list" style="display:flex;flex-direction:column;gap:1.2rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0.8rem;background:rgba(255,255,255,0.04);border-radius:8px;border:1px solid rgba(255,255,255,0.08);">
+          <div>
+            <div style="font-weight:600;font-size:0.95rem;color:#f8fafc;">Ambience & Audio</div>
+            <div style="font-size:0.8rem;color:#94a3b8;">Background environmental audio and effects</div>
+          </div>
+          <button id="btn-settings-toggle-audio" class="btn btn-secondary" style="padding:0.4rem 0.8rem;font-size:0.85rem;">Toggle Audio</button>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0.8rem;background:rgba(255,255,255,0.04);border-radius:8px;border:1px solid rgba(255,255,255,0.08);">
+          <div>
+            <div style="font-weight:600;font-size:0.95rem;color:#f8fafc;">Auto-Save Status</div>
+            <div style="font-size:0.8rem;color:#94a3b8;">Saves location, quests, vehicle, and world state automatically</div>
+          </div>
+          <div id="save-status-indicator" style="font-size:0.85rem;color:#38bdf8;font-weight:500;">Saved</div>
+        </div>
+
+        <div style="margin-top:0.5rem;padding:0.8rem;background:rgba(239,68,68,0.06);border-radius:8px;border:1px solid rgba(239,68,68,0.2);display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-weight:600;font-size:0.95rem;color:#fca5a5;">Reset Game</div>
+            <div style="font-size:0.78rem;color:#f87171;">Permanently delete local save and start fresh</div>
+          </div>
+          <button id="btn-settings-reset" class="btn-reset-game">Reset Game</button>
+        </div>
+      </div>
+    `;
+
+    this.openInfoModal('Settings', content, openerBtn);
+
+    const toggleAudioBtn = document.getElementById('btn-settings-toggle-audio');
+    if (toggleAudioBtn) {
+      toggleAudioBtn.addEventListener('click', () => {
+        globalBus.emit('audio:toggle');
+      });
+    }
+
+    const resetBtn = document.getElementById('btn-settings-reset');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openConfirmModal(
+          'Reset Game?',
+          'Your saved progress will be permanently deleted.',
+          () => {
+            this.closeConfirmModal();
+            this.closeInfoModal();
+            globalBus.emit('game:reset');
+          }
+        );
+      });
+    }
+  }
+
+  openConfirmModal(title, message, onConfirm) {
+    this.confirmCallback = onConfirm;
+    if (this.dom.confirmModalTitle) this.dom.confirmModalTitle.textContent = title;
+    if (this.dom.confirmModalBody) this.dom.confirmModalBody.textContent = message;
+    this.dom.confirmModal?.classList.remove('hidden');
+    globalBus.emit('ui:openConfirmModalActive');
+
+    setTimeout(() => {
+      this.dom.btnConfirmCancel?.focus();
+    }, 50);
+  }
+
+  closeConfirmModal(emitEvent = true) {
+    this.confirmCallback = null;
+    this.dom.confirmModal?.classList.add('hidden');
+    if (emitEvent) {
+      globalBus.emit('ui:closeConfirmModal');
+    }
+  }
+
   openInfoModal(title, contentHtml, openerBtn = null) {
     this.lastModalOpener = openerBtn;
     if (this.dom.infoModalTitle) this.dom.infoModalTitle.textContent = title;
@@ -753,6 +872,9 @@ export class UISystem {
   }
 
   closeInfoModal(emitEvent = true) {
+    if (this.dom.confirmModal && !this.dom.confirmModal.classList.contains('hidden')) {
+      this.closeConfirmModal(false);
+    }
     this.dom.infoModal?.classList.add('hidden');
     if (emitEvent) {
       globalBus.emit('ui:closeInfoModal');
@@ -776,3 +898,4 @@ export class UISystem {
 
   update() {}
 }
+

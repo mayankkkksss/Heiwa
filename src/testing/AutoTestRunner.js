@@ -594,7 +594,7 @@ export class AutoTestRunner {
     const bodyText = document.body.innerText || '';
 
     const matches = bodyText.match(japaneseRegex) || [];
-    const illegal = matches.filter((c) => c !== '平' && c !== '和');
+    const illegal = matches.filter((c) => c !== '\u5e73' && c !== '\u548c');
 
     if (illegal.length > 0) {
       return {

@@ -1528,8 +1528,32 @@ export class WorldSystem {
     this.updateSunPosition();
   }
 
+  setTimeOfDay(hours = 9.0) {
+    if (typeof hours === 'number' && isFinite(hours)) {
+      this.timeOfDayHours = (hours % 24 + 24) % 24;
+      this.broadcastTime();
+      this.updateSunPosition();
+    }
+  }
+
   stepTimeOfDay() {
     this.advanceTime(1.0);
+  }
+
+  getStateForSave() {
+    return {
+      timeOfDayHours: this.timeOfDayHours,
+    };
+  }
+
+  restoreState(data) {
+    if (data && typeof data.timeOfDayHours === 'number') {
+      this.setTimeOfDay(data.timeOfDayHours);
+    }
+  }
+
+  resetWorld() {
+    this.setTimeOfDay(9.0);
   }
 
   broadcastTime() {

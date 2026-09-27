@@ -78,5 +78,44 @@ export class QuestSystem {
     });
   }
 
+  getStateForSave() {
+    return {
+      currentQuestIndex: this.currentQuestIndex,
+      quests: this.quests.map((q) => ({
+        id: q.id,
+        completed: q.completed,
+        progress: q.progress,
+      })),
+    };
+  }
+
+  restoreState(data) {
+    if (!data) return;
+    if (Array.isArray(data.quests)) {
+      for (const sq of data.quests) {
+        const quest = this.quests.find((q) => q.id === sq.id);
+        if (quest) {
+          quest.completed = !!sq.completed;
+          quest.progress = typeof sq.progress === 'number' ? sq.progress : (quest.completed ? 1.0 : 0);
+        }
+      }
+    }
+    if (typeof data.currentQuestIndex === 'number' && data.currentQuestIndex >= 0 && data.currentQuestIndex < this.quests.length) {
+      this.currentQuestIndex = data.currentQuestIndex;
+    } else {
+      this.advanceToNextQuest();
+    }
+    this.broadcastCurrentQuest();
+  }
+
+  resetQuests() {
+    for (const q of this.quests) {
+      q.completed = false;
+      q.progress = 0;
+    }
+    this.currentQuestIndex = 0;
+    this.broadcastCurrentQuest();
+  }
+
   update() {}
 }

@@ -809,4 +809,70 @@ export class VehicleSystem {
       chassisRoll: this.chassisGroup ? this.chassisGroup.rotation.z : 0,
     };
   }
+
+  getStateForSave() {
+    const worldPos = this.getWorldPosition(new THREE.Vector3());
+    return {
+      exists: true,
+      position: { x: worldPos.x, y: worldPos.y, z: worldPos.z },
+      headingAngle: this.headingAngle,
+      state: this.state,
+    };
+  }
+
+  restoreState(data, inVehicle = false) {
+    if (!data) return;
+    if (data.position) {
+      this.position.set(data.position.x, data.position.y ?? 0, data.position.z);
+      if (this.mesh) {
+        this.mesh.position.copy(this.position);
+      }
+    }
+    if (typeof data.headingAngle === 'number') {
+      this.headingAngle = data.headingAngle;
+      if (this.mesh) {
+        this.mesh.rotation.set(0, this.headingAngle, 0);
+      }
+    }
+    this.speed = 0;
+    this.velocity.set(0, 0, 0);
+    this.steerAngle = 0;
+    this.updateGrounding(1.0);
+
+    if (inVehicle) {
+      this.state = VehicleState.IN_VEHICLE;
+      if (this.driverEntryAnchor) {
+        this.driverEntryAnchor.userData.prompt = 'Enter Car (press twice)';
+      }
+      if (this.mesh) {
+        this.mesh.userData.prompt = 'Enter Car (press twice)';
+      }
+    } else {
+      this.state = VehicleState.ON_FOOT;
+      if (this.driverEntryAnchor) {
+        this.driverEntryAnchor.userData.prompt = 'Enter Car (press twice)';
+      }
+      if (this.mesh) {
+        this.mesh.userData.prompt = 'Enter Car (press twice)';
+      }
+    }
+  }
+
+  resetToInitial() {
+    this.position.set(-20.0, 0, -46.5);
+    this.headingAngle = Math.PI / 2;
+    this.speed = 0;
+    this.velocity.set(0, 0, 0);
+    this.steerAngle = 0;
+    this.state = VehicleState.ON_FOOT;
+    this.updateGrounding(1.0);
+    if (this.mesh) {
+      this.mesh.position.copy(this.position);
+      this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, this.terrainRoll || 0, 'YXZ');
+      this.mesh.userData.prompt = 'Enter Car (press twice)';
+    }
+    if (this.driverEntryAnchor) {
+      this.driverEntryAnchor.userData.prompt = 'Enter Car (press twice)';
+    }
+  }
 }

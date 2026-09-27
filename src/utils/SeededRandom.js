@@ -5,11 +5,26 @@
  */
 
 export const HEIWA_WORLD_SEED = 20260927;
+let activeWorldSeed = HEIWA_WORLD_SEED;
+
+export function setWorldSeed(seed) {
+  if (typeof seed === 'number' && isFinite(seed) && !isNaN(seed)) {
+    activeWorldSeed = seed >>> 0;
+  }
+}
+
+export function getWorldSeed() {
+  return activeWorldSeed;
+}
+
+export function resetWorldSeed() {
+  activeWorldSeed = HEIWA_WORLD_SEED;
+}
 
 /**
  * SplitMix32 / Mulberry32 deterministic generator
  */
-export function createRng(seed) {
+export function createRng(seed = getWorldSeed()) {
   let s = seed >>> 0;
   return function next() {
     s = (s + 0x6d2b79f5) | 0;
@@ -22,7 +37,7 @@ export function createRng(seed) {
 /**
  * Creates a deterministic 32-bit hash from chunk coordinates and world seed
  */
-export function hashChunkCoords(chunkX, chunkZ, seed = HEIWA_WORLD_SEED, salt = 0) {
+export function hashChunkCoords(chunkX, chunkZ, seed = getWorldSeed(), salt = 0) {
   let h = seed ^ (chunkX * 374761393) ^ (chunkZ * 668265263) ^ (salt * 1442695040);
   h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
   h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
@@ -32,7 +47,7 @@ export function hashChunkCoords(chunkX, chunkZ, seed = HEIWA_WORLD_SEED, salt = 
 /**
  * Returns a seeded RNG scoped specifically to a chunk and sub-feature
  */
-export function getChunkRng(chunkX, chunkZ, salt = 0, seed = HEIWA_WORLD_SEED) {
+export function getChunkRng(chunkX, chunkZ, salt = 0, seed = getWorldSeed()) {
   const chunkSeed = hashChunkCoords(chunkX, chunkZ, seed, salt);
   return createRng(chunkSeed);
 }

@@ -10,6 +10,7 @@ import { AudioSystem } from './systems/AudioSystem.js';
 import { UISystem } from './systems/UISystem.js';
 import { WorldStreamingSystem } from './world/WorldStreamingSystem.js';
 import { VehicleSystem } from './entities/VehicleSystem.js';
+import { SaveSystem } from './engine/SaveSystem.js';
 import { globalBus } from './engine/EventBus.js';
 import { globalGameState, GameState } from './engine/GameStateManager.js';
 import { globalInput } from './engine/InputManager.js';
@@ -95,6 +96,10 @@ class GameApp {
       const interactionSystem = new InteractionSystem();
       const questSystem = new QuestSystem();
       const uiSystem = new UISystem();
+      const saveSystem = new SaveSystem();
+
+      this.saveSystem = saveSystem;
+      window.__HEIWA_SAVE_SYSTEM__ = saveSystem;
 
       const systemsToRegister = [
         { name: 'AudioSystem', instance: audioSystem, optional: true },
@@ -107,6 +112,7 @@ class GameApp {
         { name: 'InteractionSystem', instance: interactionSystem, optional: false },
         { name: 'QuestSystem', instance: questSystem, optional: false },
         { name: 'UISystem', instance: uiSystem, optional: false },
+        { name: 'SaveSystem', instance: saveSystem, optional: false },
       ];
 
       for (const sys of systemsToRegister) {
@@ -182,16 +188,27 @@ class GameApp {
       }
     }, 8000);
 
+    const hasSaveData = this.saveSystem && this.saveSystem.hasSave();
+
     const stages = [
-      { name: 'INITIALIZING ENGINE...', progress: 0.15, delay: 60 },
-      { name: 'BUILDING DISTRICT ENVIRONMENT...', progress: 0.4, delay: 80 },
-      { name: 'CONFIGURING MAYANK & PHYSICS...', progress: 0.65, delay: 60 },
-      { name: 'POULATING NEIGHBORHOOD RESIDENTS...', progress: 0.85, delay: 60 },
-      { name: 'PREPARING PEACEFUL SOUNDSCAPES...', progress: 0.95, delay: 50 },
-      { name: 'READY', progress: 1.0, delay: 80 },
+      { name: 'INITIALIZING ENGINE...', progress: 0.15, delay: 50 },
+      { name: hasSaveData ? 'STREAMING SAVED REGION...' : 'BUILDING DISTRICT ENVIRONMENT...', progress: 0.4, delay: 60 },
+      { name: 'CONFIGURING MAYANK & PHYSICS...', progress: 0.65, delay: 50 },
+      { name: 'POPULATING NEIGHBORHOOD RESIDENTS...', progress: 0.85, delay: 50 },
+      { name: 'PREPARING PEACEFUL SOUNDSCAPES...', progress: 0.95, delay: 40 },
+      { name: 'READY', progress: 1.0, delay: 60 },
     ];
 
     try {
+      let restored = false;
+      if (hasSaveData) {
+        try {
+          restored = this.saveSystem.restoreGameState();
+        } catch (err) {
+          console.warn('[GameApp] Error restoring saved state:', err);
+        }
+      }
+
       for (const stage of stages) {
         globalBus.emit('loading:progress', {
           stage: stage.name,
@@ -205,9 +222,15 @@ class GameApp {
       // Transition smoothly to PLAYING
       globalGameState.setState(GameState.PLAYING);
 
-      globalBus.emit('toast:show', {
-        message: 'Welcome to Sakuragaoka District!',
-      });
+      if (restored) {
+        globalBus.emit('toast:show', {
+          message: 'Resumed exploration.',
+        });
+      } else {
+        globalBus.emit('toast:show', {
+          message: 'Welcome to Sakuragaoka District!',
+        });
+      }
     } catch (err) {
       clearTimeout(loadingTimeout);
       showStartupError('beginGameLoading', err);

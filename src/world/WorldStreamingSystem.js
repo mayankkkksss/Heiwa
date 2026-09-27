@@ -1425,6 +1425,34 @@ export class WorldStreamingSystem {
     }
   }
 
+  getStateForSave() {
+    return {
+      worldSeed: this.worldSeed,
+      discoveredDestinations: Array.from(this.discoveredDestinations),
+    };
+  }
+
+  restoreState(data, targetPos) {
+    if (data && typeof data.worldSeed === 'number') {
+      this.worldSeed = data.worldSeed;
+    }
+    if (data && Array.isArray(data.discoveredDestinations)) {
+      this.discoveredDestinations = new Set(data.discoveredDestinations);
+    }
+    if (targetPos) {
+      this.targetFollowPos.set(targetPos.x, targetPos.y ?? 0, targetPos.z);
+      this.updateStreaming(this.targetFollowPos, true);
+    }
+  }
+
+  resetStreaming() {
+    this.worldSeed = HEIWA_WORLD_SEED;
+    this.discoveredDestinations.clear();
+    this.targetFollowPos.set(0, 0, 0);
+    this.targetFollowVelocity.set(0, 0, 0);
+    this.updateStreaming(this.targetFollowPos, true);
+  }
+
   /**
    * Diagnostic summary of active streamed chunks and memory state
    */
