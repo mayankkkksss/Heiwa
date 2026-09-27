@@ -1473,7 +1473,7 @@ export class WorldSystem {
       }
     }
 
-    if (process.env.NODE_ENV !== 'production' || typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' || (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production')) {
       console.log(
         `[WorldSystem] World colliders registered: ${this.colliders.length} | Trees: ${treeCount} | Poles: ${poleCount} | Cars: ${carCount} | Fences/Planters: ${fenceCount} | Benches: ${benchCount} | Buildings/Interiors: ${buildingCount} | Props: ${propCount}`
       );

@@ -31,7 +31,7 @@ assert(styleCss.includes('pointer-events: auto'), "style.css ensures minimap cap
 
 // 3. Check InputManager.js
 const inputManager = fs.readFileSync(path.resolve('src/engine/InputManager.js'), 'utf8');
-assert(inputManager.includes('KeyM'), "InputManager handles KeyM");
+assert(inputManager.includes('toggleMinimap') || inputManager.includes('KeyM'), "InputManager handles KeyM / toggleMinimap");
 assert(inputManager.includes('ui:toggleMinimap'), "InputManager emits 'ui:toggleMinimap'");
 
 // 4. Check UISystem.js

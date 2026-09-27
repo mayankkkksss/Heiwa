@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "test": "node scripts/run_autotest_audit.js"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "three": "^0.170.0"
   },

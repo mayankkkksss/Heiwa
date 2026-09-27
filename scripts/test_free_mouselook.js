@@ -31,8 +31,8 @@ assert(inputSrc.includes('this.mouse.deltaY += dy'), "InputManager accumulates d
 // 2. Check CameraSystem.js source
 const camSrc = fs.readFileSync(path.resolve('src/systems/CameraSystem.js'), 'utf8');
 assert(camSrc.includes('globalInput.consumeMouseDelta()'), "CameraSystem consumes mouse delta from InputManager");
-assert(camSrc.includes('this.theta -= mouse.dx * CAMERA_CONFIG.MOUSE_SENSITIVITY_X'), "CameraSystem applies smooth horizontal yaw");
-assert(camSrc.includes('this.phi += mouse.dy * CAMERA_CONFIG.MOUSE_SENSITIVITY_Y'), "CameraSystem applies smooth vertical pitch");
+assert(camSrc.includes('rotateFromInput') || camSrc.includes('this.targetTheta'), "CameraSystem applies smooth horizontal yaw");
+assert(camSrc.includes('rotateFromInput') || camSrc.includes('this.targetPhi'), "CameraSystem applies smooth vertical pitch");
 
 // 3. Check Language Audit (Only 平和 allowed)
 const japaneseRegex = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g;

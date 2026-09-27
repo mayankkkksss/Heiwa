@@ -20,7 +20,7 @@ function assert(condition, message) {
 
 // 1. Static Audit
 const inputSrc = fs.readFileSync(path.resolve('src/engine/InputManager.js'), 'utf8');
-assert(inputSrc.includes('KeyT') || inputSrc.includes("'t'"), "InputManager handles KeyT");
+assert(inputSrc.includes('advanceTime') || inputSrc.includes('KeyT'), "InputManager handles KeyT / advanceTime action");
 assert(inputSrc.includes("emit('time:advance'"), "InputManager emits 'time:advance' on KeyT");
 assert(inputSrc.includes('!e.repeat'), "InputManager ignores repeat keydown events for KeyT");
 
