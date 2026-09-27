@@ -627,7 +627,7 @@ export class VehicleSystem {
     }
 
     const input = globalInput.getMovementInput();
-    const isHandbrake = globalInput.isKeyPressed('Space');
+    const isHandbrake = globalInput.isActionPressed('jump') || globalInput.isKeyPressed('Space');
 
     // 1. Acceleration & Braking
     // input.z < 0 is Forward (W key), input.z > 0 is Reverse (S key)

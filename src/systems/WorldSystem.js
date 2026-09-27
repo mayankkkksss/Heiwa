@@ -1824,6 +1824,7 @@ export class WorldSystem {
   }
 
   updateSunPosition() {
+    if (!this.sunLight) return;
     const hours = this.timeOfDayHours;
     const angle = ((hours - 6) / 24) * Math.PI * 2;
     const sunElevation = Math.sin(angle);

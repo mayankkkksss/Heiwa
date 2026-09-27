@@ -1,5 +1,7 @@
 import { globalBus } from '../engine/EventBus.js';
 import { globalGameState, GameState } from '../engine/GameStateManager.js';
+import { globalInput } from '../engine/InputManager.js';
+import { ACTION_DEFINITIONS, formatKeyDisplay } from '../engine/KeyBindings.js';
 
 /**
  * UISystem - Manages Title Screen, Loading Flow, Minimal Gameplay HUD, and Modals
@@ -802,7 +804,18 @@ export class UISystem {
           <div id="save-status-indicator" style="font-size:0.85rem;color:#38bdf8;font-weight:500;">Saved</div>
         </div>
 
-        <div style="margin-top:0.5rem;padding:0.8rem;background:rgba(239,68,68,0.06);border-radius:8px;border:1px solid rgba(239,68,68,0.2);display:flex;justify-content:space-between;align-items:center;">
+        <div class="key-bindings-section">
+          <div class="key-bindings-header">
+            <div>
+              <div style="font-weight:600;font-size:0.95rem;color:#f8fafc;">Key Bindings</div>
+              <div style="font-size:0.8rem;color:#94a3b8;">Customize controls for walking and driving</div>
+            </div>
+            <button id="btn-settings-reset-controls" class="btn btn-secondary" style="padding:0.35rem 0.75rem;font-size:0.8rem;">Reset Controls</button>
+          </div>
+          <div id="key-bindings-list" class="key-bindings-list"></div>
+        </div>
+
+        <div style="margin-top:0.2rem;padding:0.8rem;background:rgba(239,68,68,0.06);border-radius:8px;border:1px solid rgba(239,68,68,0.2);display:flex;justify-content:space-between;align-items:center;">
           <div>
             <div style="font-weight:600;font-size:0.95rem;color:#fca5a5;">Reset Game</div>
             <div style="font-size:0.78rem;color:#f87171;">Permanently delete local save and start fresh</div>
@@ -814,6 +827,7 @@ export class UISystem {
 
     this.openInfoModal('Settings', content, openerBtn);
 
+    // 1. Audio toggle
     const toggleAudioBtn = document.getElementById('btn-settings-toggle-audio');
     if (toggleAudioBtn) {
       toggleAudioBtn.addEventListener('click', () => {
@@ -821,6 +835,106 @@ export class UISystem {
       });
     }
 
+    // 2. Key Bindings rendering and interaction
+    const renderKeyBindingRows = () => {
+      const listEl = document.getElementById('key-bindings-list');
+      if (!listEl) return;
+
+      listEl.innerHTML = ACTION_DEFINITIONS.map((act) => {
+        const currentCode = globalInput.getBinding(act.id);
+        const displayKey = formatKeyDisplay(currentCode);
+        return `
+          <div class="key-binding-row" data-action="${act.id}">
+            <span class="key-action-label">${act.label}</span>
+            <div class="key-binding-controls">
+              <span class="key-binding-badge" id="key-badge-${act.id}">${displayKey}</span>
+              <button class="btn btn-secondary btn-change-key" id="btn-change-${act.id}" data-action="${act.id}">Change</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      attachKeyChangeListeners();
+    };
+
+    const attachKeyChangeListeners = () => {
+      const changeButtons = document.querySelectorAll('.btn-change-key');
+      changeButtons.forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const actionId = btn.getAttribute('data-action');
+          if (!actionId) return;
+
+          // Reset all other change buttons
+          changeButtons.forEach((b) => {
+            b.textContent = 'Change';
+            b.classList.remove('listening');
+          });
+
+          btn.textContent = 'Press a key...';
+          btn.classList.add('listening');
+
+          globalInput.startKeyCapture(
+            actionId,
+            (newCode) => {
+              btn.textContent = 'Change';
+              btn.classList.remove('listening');
+
+              const conflictAction = globalInput.findConflict(actionId, newCode);
+              if (conflictAction) {
+                const conflictDef = ACTION_DEFINITIONS.find((a) => a.id === conflictAction);
+                const actionDef = ACTION_DEFINITIONS.find((a) => a.id === actionId);
+                const keyName = formatKeyDisplay(newCode);
+
+                this.openConfirmModal(
+                  'Key Conflict',
+                  `${keyName} is already assigned to ${conflictDef?.label || conflictAction}. Replace existing binding?`,
+                  () => {
+                    this.closeConfirmModal();
+                    // Clear conflicting action and assign newCode to actionId
+                    globalInput.setBinding(conflictAction, '');
+                    globalInput.setBinding(actionId, newCode);
+                    renderKeyBindingRows();
+                    this.showToast(`${actionDef?.label || actionId} bound to ${keyName}.`);
+                  }
+                );
+              } else {
+                globalInput.setBinding(actionId, newCode);
+                renderKeyBindingRows();
+                const actionDef = ACTION_DEFINITIONS.find((a) => a.id === actionId);
+                this.showToast(`${actionDef?.label || actionId} bound to ${formatKeyDisplay(newCode)}.`);
+              }
+            },
+            () => {
+              btn.textContent = 'Change';
+              btn.classList.remove('listening');
+            }
+          );
+        });
+      });
+    };
+
+    renderKeyBindingRows();
+
+    // 3. Reset Controls button
+    const resetControlsBtn = document.getElementById('btn-settings-reset-controls');
+    if (resetControlsBtn) {
+      resetControlsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openConfirmModal(
+          'Reset Controls?',
+          'Restore all keyboard controls to their default keys?',
+          () => {
+            this.closeConfirmModal();
+            globalInput.resetBindings();
+            renderKeyBindingRows();
+            this.showToast('Keyboard controls restored to defaults.');
+          }
+        );
+      });
+    }
+
+    // 4. Reset Game button
     const resetBtn = document.getElementById('btn-settings-reset');
     if (resetBtn) {
       resetBtn.addEventListener('click', (e) => {
@@ -872,6 +986,7 @@ export class UISystem {
   }
 
   closeInfoModal(emitEvent = true) {
+    globalInput.cancelKeyCapture();
     if (this.dom.confirmModal && !this.dom.confirmModal.classList.contains('hidden')) {
       this.closeConfirmModal(false);
     }

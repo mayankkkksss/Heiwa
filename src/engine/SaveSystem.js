@@ -18,6 +18,7 @@ export class SaveSystem {
     this.saveTimer = null;
     this.debounceTimer = null;
     this.isSaving = false;
+    this.isResetting = false;
     this.lastSaveTime = 0;
     this.lastSaveStatus = 'None';
   }
@@ -32,6 +33,7 @@ export class SaveSystem {
     globalBus.on('time:updated', () => this.scheduleSave('Time Update'));
     globalBus.on('player:sittingChanged', () => this.scheduleSave('Sitting State'));
     globalBus.on('destination:discovered', () => this.scheduleSave('Destination Discovered'));
+    globalBus.on('game:reset', () => this.resetGame());
     globalBus.on('ui:requestReset', () => this.resetGame());
 
     // 2. Browser Page Lifecycle & Visibility Hooks
@@ -133,13 +135,15 @@ export class SaveSystem {
    * Schedule a debounced save to coalesce multiple rapid game events
    */
   scheduleSave(reason = '') {
-    if (!globalGameState.is(GameState.PLAYING)) return;
+    if (this.isResetting || !globalGameState.is(GameState.PLAYING)) return;
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
-      this.saveNow(reason);
+      if (!this.isResetting) {
+        this.saveNow(reason);
+      }
     }, DEBOUNCE_DELAY_MS);
   }
 
@@ -147,7 +151,7 @@ export class SaveSystem {
    * Performs an immediate, atomic write of current game state to localStorage
    */
   saveNow(reason = '', force = false) {
-    if (this.isSaving) return false;
+    if (this.isResetting || this.isSaving) return false;
     if (!this.engine) return false;
     if (!force && !globalGameState.is(GameState.PLAYING)) return false;
 
@@ -280,8 +284,18 @@ export class SaveSystem {
    * Permanently clears save from storage and resets all in-memory systems to default
    */
   resetGame() {
+    if (this.isResetting) return;
+    this.isResetting = true;
+
     console.log('[SaveSystem] Resetting game: clearing local storage and restoring defaults.');
 
+    // 1. Cancel and clear any pending debounced autosaves
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+
+    // 2. Remove saved game record from localStorage
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(SAVE_KEY);
@@ -290,9 +304,10 @@ export class SaveSystem {
       console.warn('[SaveSystem] Error removing save from localStorage:', err);
     }
 
-    // Reset master seed
+    // 3. Reset in-memory master world seed
     resetWorldSeed();
 
+    // 4. Reset all registered game subsystems to fresh defaults
     const playerSys = this.engine?.systems.find((s) => s.constructor.name === 'PlayerSystem');
     const vehicleSys = this.engine?.systems.find((s) => s.constructor.name === 'VehicleSystem');
     const cameraSys = this.engine?.systems.find((s) => s.constructor.name === 'CameraSystem');
@@ -319,14 +334,17 @@ export class SaveSystem {
       cameraSys.resetCamera();
     }
 
+    // 5. Clear cached save state in memory
     this.lastSaveTime = 0;
     this.lastSaveStatus = 'Reset';
 
     globalBus.emit('save:deleted');
     globalBus.emit('toast:show', { message: 'Game progress has been reset.' });
 
-    // Transition back to TITLE screen
+    // 6. Transition cleanly back to TITLE screen
     globalGameState.setState(GameState.TITLE);
+
+    this.isResetting = false;
   }
 
   destroy() {

@@ -308,4 +308,59 @@ export class CameraSystem {
     // Emit heading for UI compass / radar
     globalBus.emit('camera:heading', { theta: this.theta });
   }
+
+  getStateForSave() {
+    return {
+      theta: this.theta,
+      phi: this.phi,
+      desiredDistance: this.desiredDistance,
+      mode: this.mode,
+    };
+  }
+
+  restoreState(data, focusPos) {
+    if (data) {
+      if (typeof data.theta === 'number' && !isNaN(data.theta)) {
+        this.theta = data.theta;
+      }
+      if (typeof data.phi === 'number' && !isNaN(data.phi)) {
+        this.phi = data.phi;
+      }
+      if (typeof data.desiredDistance === 'number' && !isNaN(data.desiredDistance)) {
+        this.desiredDistance = data.desiredDistance;
+        this.currentDistance = data.desiredDistance;
+      }
+      if (data.mode) {
+        this.mode = data.mode;
+      }
+    }
+    if (focusPos) {
+      this.target.set(focusPos.x, (focusPos.y || 0) + (this.isVehicleMode ? 1.65 : CAMERA_CONFIG.CAMERA_HEIGHT), focusPos.z);
+      this.smoothedTarget.copy(this.target);
+      const idealX = this.smoothedTarget.x + this.currentDistance * Math.sin(this.theta) * Math.cos(this.phi);
+      const idealY = Math.max(this.smoothedTarget.y + this.currentDistance * Math.sin(this.phi), 0.55);
+      const idealZ = this.smoothedTarget.z + this.currentDistance * Math.cos(this.theta) * Math.cos(this.phi);
+      this.currentPosition.set(idealX, idealY, idealZ);
+      if (this.camera) {
+        this.camera.position.copy(this.currentPosition);
+        this.camera.lookAt(this.smoothedTarget);
+      }
+    }
+  }
+
+  resetCamera() {
+    this.theta = 0;
+    this.phi = 0.24;
+    this.desiredDistance = CAMERA_CONFIG.CAMERA_DISTANCE;
+    this.currentDistance = CAMERA_CONFIG.CAMERA_DISTANCE;
+    this.mode = 'normal';
+    this.target.set(-24.0, CAMERA_CONFIG.CAMERA_HEIGHT, -46.5);
+    this.smoothedTarget.copy(this.target);
+    this.currentPosition.set(-24.0, 2.5, -41.0);
+    if (this.camera) {
+      this.camera.position.copy(this.currentPosition);
+      this.camera.lookAt(this.smoothedTarget);
+    }
+  }
 }
+

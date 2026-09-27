@@ -1448,9 +1448,22 @@ export class WorldStreamingSystem {
   resetStreaming() {
     this.worldSeed = HEIWA_WORLD_SEED;
     this.discoveredDestinations.clear();
+    this.generationQueue.length = 0;
+
+    // Unload all non-authored active chunks
+    for (const [key, chunk] of Array.from(this.activeChunks.entries())) {
+      if (!chunk.isAuthored) {
+        this.unloadChunk(key);
+      }
+    }
+
     this.targetFollowPos.set(0, 0, 0);
     this.targetFollowVelocity.set(0, 0, 0);
-    this.updateStreaming(this.targetFollowPos, true);
+    this.currentCenterChunk.x = 0;
+    this.currentCenterChunk.z = 0;
+    if (this.scene) {
+      this.updateStreaming(this.targetFollowPos, true);
+    }
   }
 
   /**
