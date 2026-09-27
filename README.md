@@ -724,13 +724,17 @@ node scripts/test_streaming_and_vehicle.js
 
 ---
 
-## 🌸 Attribution & Credits
+## 🌸 Credits
 
-- **Creator & Developer**: Mayank (AI-assisted engineering with Google DeepMind Advanced Agentic Coding)
-- **Three.js**: [Mr.doob & Three.js Authors](https://github.com/mrdoob/three.js/) (MIT License)
-- **Vite**: [Evan You & Vite Contributors](https://github.com/vitejs/vite) (MIT License)
-- **Typography**: [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) by Tokotype (SIL Open Font License)
+### Development Tools & AI Assistance
+- **Antigravity** — Used for coding and implementation.
+- **ChatGPT** — Used for prompting and AI-assisted development guidance.
+
+### Technologies & Libraries
+- **Three.js** — 3D WebGL graphics engine
+- **Vite** — Next generation frontend tooling
+- **Plus Jakarta Sans** — Typography by Tokotype
 
 ---
 
-**HEIWA (平和) — A peaceful, mindful journey through everyday Japan.**
+**Whole project is AI-generated Including README.md; perception are not.**

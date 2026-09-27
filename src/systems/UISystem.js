@@ -36,6 +36,7 @@ export class UISystem {
       btnBegin: document.getElementById('btn-begin'),
       btnSettings: document.getElementById('btn-settings'),
       btnAbout: document.getElementById('btn-about'),
+      btnCredits: document.getElementById('btn-credits'),
 
       // Loading elements
       loadingBarFill: document.getElementById('loading-bar-fill'),
@@ -67,6 +68,7 @@ export class UISystem {
       btnPauseAudio: document.getElementById('btn-pause-audio'),
       btnPauseControls: document.getElementById('btn-pause-controls'),
       btnPauseSettings: document.getElementById('btn-pause-settings'),
+      btnPauseCredits: document.getElementById('btn-pause-credits'),
       btnPauseQuit: document.getElementById('btn-pause-quit'),
 
       // Info Modal
@@ -103,13 +105,14 @@ export class UISystem {
     if (this.dom.btnAbout) {
       this.dom.btnAbout.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.openInfoModal('About HEIWA', `
-          <div class="about-content">
-            <p><strong>HEIWA</strong> means peace.</p>
-            <p>You play as Mayank, a humble, calm, observant, and helpful young Indian man living in a peaceful Japanese neighborhood (Sakuragaoka).</p>
-            <p>The game is completely non-violent — centered on daily life exploration, neighborhood connection, and tranquility.</p>
-          </div>
-        `, this.dom.btnAbout);
+        this.openAboutModal(this.dom.btnAbout);
+      });
+    }
+
+    if (this.dom.btnCredits) {
+      this.dom.btnCredits.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openCreditsModal(this.dom.btnCredits);
       });
     }
 
@@ -218,6 +221,12 @@ export class UISystem {
     if (this.dom.btnPauseSettings) {
       this.dom.btnPauseSettings.addEventListener('click', () => {
         this.openSettingsModal(this.dom.btnPauseSettings);
+      });
+    }
+
+    if (this.dom.btnPauseCredits) {
+      this.dom.btnPauseCredits.addEventListener('click', () => {
+        this.openCreditsModal(this.dom.btnPauseCredits);
       });
     }
 
@@ -788,6 +797,12 @@ export class UISystem {
   openSettingsModal(openerBtn = null) {
     const content = `
       <div class="settings-content settings-list" style="display:flex;flex-direction:column;gap:1.2rem;">
+        <div class="settings-nav-bar">
+          <button class="settings-nav-btn active">Settings</button>
+          <button class="settings-nav-btn" id="nav-settings-about">About</button>
+          <button class="settings-nav-btn" id="nav-settings-credits">Credits</button>
+        </div>
+
         <div style="display:flex;justify-content:space-between;align-items:center;padding:0.6rem 0.8rem;background:rgba(255,255,255,0.04);border-radius:8px;border:1px solid rgba(255,255,255,0.08);">
           <div>
             <div style="font-weight:600;font-size:0.95rem;color:#f8fafc;">Ambience & Audio</div>
@@ -826,6 +841,23 @@ export class UISystem {
     `;
 
     this.openInfoModal('Settings', content, openerBtn);
+
+    // Nav bar listeners
+    const navAbout = document.getElementById('nav-settings-about');
+    if (navAbout) {
+      navAbout.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openAboutModal(openerBtn);
+      });
+    }
+
+    const navCredits = document.getElementById('nav-settings-credits');
+    if (navCredits) {
+      navCredits.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openCreditsModal(openerBtn);
+      });
+    }
 
     // 1. Audio toggle
     const toggleAudioBtn = document.getElementById('btn-settings-toggle-audio');
@@ -948,6 +980,117 @@ export class UISystem {
             globalBus.emit('game:reset');
           }
         );
+      });
+    }
+  }
+
+  openAboutModal(openerBtn = null) {
+    const content = `
+      <div class="about-content">
+        <div class="settings-nav-bar">
+          <button class="settings-nav-btn" id="nav-about-settings">Settings</button>
+          <button class="settings-nav-btn active">About</button>
+          <button class="settings-nav-btn" id="nav-about-credits">Credits</button>
+        </div>
+        <p><strong>HEIWA</strong> means peace.</p>
+        <p>You play as Mayank, a humble, calm, observant, and helpful young Indian man living in a peaceful Japanese neighborhood (Sakuragaoka).</p>
+        <p>The game is completely non-violent — centered on daily life exploration, neighborhood connection, and tranquility.</p>
+        <div style="margin-top:0.5rem;padding-top:0.75rem;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:0.82rem;color:#94a3b8;">Created by Mayank Suthar</span>
+          <button id="btn-about-view-credits" class="btn btn-secondary" style="padding:0.35rem 0.75rem;font-size:0.8rem;">View Credits</button>
+        </div>
+      </div>
+    `;
+    this.openInfoModal('About HEIWA', content, openerBtn);
+
+    const navSettings = document.getElementById('nav-about-settings');
+    if (navSettings) {
+      navSettings.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openSettingsModal(openerBtn);
+      });
+    }
+    const navCredits = document.getElementById('nav-about-credits');
+    if (navCredits) {
+      navCredits.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openCreditsModal(openerBtn);
+      });
+    }
+    const btnViewCredits = document.getElementById('btn-about-view-credits');
+    if (btnViewCredits) {
+      btnViewCredits.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openCreditsModal(openerBtn);
+      });
+    }
+  }
+
+  openCreditsModal(openerBtn = null) {
+    const content = `
+      <div class="credits-panel">
+        <div class="settings-nav-bar">
+          <button class="settings-nav-btn" id="nav-credits-settings">Settings</button>
+          <button class="settings-nav-btn" id="nav-credits-about">About</button>
+          <button class="settings-nav-btn active">Credits</button>
+        </div>
+
+        <div class="credits-header">
+          <div style="font-size:2rem;font-weight:700;color:#ff758f;margin-bottom:0.2rem;">平和</div>
+          <div style="font-size:1.1rem;font-weight:700;color:#ffffff;letter-spacing:0.08em;">HEIWA</div>
+          <div style="font-size:0.82rem;color:#94a3b8;margin-top:0.2rem;">A Quiet Life in Japan</div>
+        </div>
+
+        <div class="credits-section">
+          <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:#38bdf8;font-weight:600;margin-bottom:0.35rem;">Creator / Developer</div>
+          <div style="font-size:1.1rem;font-weight:700;color:#ffffff;margin-bottom:0.4rem;">Mayank Suthar</div>
+          <div style="font-size:0.85rem;color:#cbd5e1;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
+            <span style="color:#94a3b8;">GitHub:</span>
+            <a href="https://github.com/mayankkkksss/" target="_blank" rel="noopener noreferrer" class="credits-link" id="credits-github-link">https://github.com/mayankkkksss/</a>
+          </div>
+        </div>
+
+        <div class="credits-section" style="display:flex;flex-direction:column;gap:0.85rem;">
+          <div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:#38bdf8;font-weight:600;margin-bottom:0.25rem;">Development & Coding Tool</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#ffffff;">Antigravity</div>
+            <div style="font-size:0.8rem;color:#94a3b8;">Coding and implementation</div>
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:0.75rem;">
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:#38bdf8;font-weight:600;margin-bottom:0.25rem;">Prompting & AI Assistance</div>
+            <div style="font-size:0.95rem;font-weight:600;color:#ffffff;">ChatGPT</div>
+            <div style="font-size:0.8rem;color:#94a3b8;">Prompting and AI-assisted development guidance</div>
+          </div>
+        </div>
+
+        <div class="credits-section" style="font-size:0.8rem;color:#94a3b8;line-height:1.5;">
+          <div><strong>Three.js</strong> — 3D WebGL Graphics Engine</div>
+          <div><strong>Vite</strong> — Next Generation Frontend Tooling</div>
+          <div><strong>Plus Jakarta Sans</strong> — Typography by Tokotype</div>
+        </div>
+      </div>
+    `;
+    this.openInfoModal('Credits', content, openerBtn);
+
+    const navSettings = document.getElementById('nav-credits-settings');
+    if (navSettings) {
+      navSettings.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openSettingsModal(openerBtn);
+      });
+    }
+    const navAbout = document.getElementById('nav-credits-about');
+    if (navAbout) {
+      navAbout.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openAboutModal(openerBtn);
+      });
+    }
+
+    const ghLink = document.getElementById('credits-github-link');
+    if (ghLink) {
+      ghLink.addEventListener('click', (e) => {
+        e.stopPropagation();
       });
     }
   }
