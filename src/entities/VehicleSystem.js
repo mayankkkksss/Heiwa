@@ -252,7 +252,7 @@ export class VehicleSystem {
 
     if (this.mesh) {
       this.mesh.position.copy(this.position);
-      this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, -(this.terrainRoll || 0), 'YXZ');
+      this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, this.terrainRoll || 0, 'YXZ');
     }
 
     this.velocity.set(forwardX * this.speed, 0, forwardZ * this.speed);
@@ -297,8 +297,18 @@ export class VehicleSystem {
     const leftH = (hFL + hRL) / 2.0;
     const rightH = (hFR + hRR) / 2.0;
 
-    this.terrainPitch = THREE.MathUtils.clamp((frontH - rearH) / this.wheelbase, -0.22, 0.22);
-    this.terrainRoll = THREE.MathUtils.clamp((rightH - leftH) / this.trackWidth, -0.18, 0.18);
+    // Correct pitch calculation: When front is higher than rear (uphill, frontH > rearH),
+    // Three.js rotation.x must be negative to elevate the +Z front nose and keep -Z rear grounded.
+    const targetPitch = THREE.MathUtils.clamp((rearH - frontH) / this.wheelbase, -0.22, 0.22);
+    const targetRoll = THREE.MathUtils.clamp((rightH - leftH) / this.trackWidth, -0.18, 0.18);
+
+    if (delta >= 0.5) {
+      this.terrainPitch = targetPitch;
+      this.terrainRoll = targetRoll;
+    } else {
+      this.terrainPitch = THREE.MathUtils.lerp(this.terrainPitch || 0, targetPitch, Math.min(1, 16.0 * delta));
+      this.terrainRoll = THREE.MathUtils.lerp(this.terrainRoll || 0, targetRoll, Math.min(1, 16.0 * delta));
+    }
 
     return {
       targetGroundY,
@@ -306,6 +316,8 @@ export class VehicleSystem {
       hFR,
       hRL,
       hRR,
+      frontH,
+      rearH,
       terrainPitch: this.terrainPitch,
       terrainRoll: this.terrainRoll,
     };
@@ -320,7 +332,7 @@ export class VehicleSystem {
     this.updateGrounding(1.0); // Immediate initial ground snap
     if (this.mesh) {
       this.mesh.position.copy(this.position);
-      this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, -(this.terrainRoll || 0), 'YXZ');
+      this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, this.terrainRoll || 0, 'YXZ');
     }
     this.scene.add(this.mesh);
 
@@ -684,7 +696,7 @@ export class VehicleSystem {
     this.updateGrounding(delta);
 
     this.mesh.position.copy(this.position);
-    this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, -(this.terrainRoll || 0), 'YXZ');
+    this.mesh.rotation.set(this.terrainPitch || 0, this.headingAngle, this.terrainRoll || 0, 'YXZ');
 
     // Wheel spin & front steering
     this.wheelAngle += (this.speed / 0.32) * delta;
@@ -703,9 +715,25 @@ export class VehicleSystem {
       this.rearRightWheel.children[0].rotation.x = this.wheelAngle;
     }
 
-    // Chassis dynamic body roll and pitch
+    // Chassis dynamic body roll and acceleration/braking pitch response
     const bodyRoll = -(this.speed / this.maxSpeed) * (this.steerAngle / this.maxSteerAngle) * 0.08;
-    const bodyPitch = (throttle * this.acceleration * 0.015);
+
+    // Corrected Acceleration Pitch: Forward acceleration transfers weight to rear (negative rotation around X tilts nose up, rear squats)
+    // Braking transfers weight to front (positive rotation around X dips nose down)
+    let bodyPitch = 0;
+    if (throttle > 0) {
+      bodyPitch = -(throttle * (this.acceleration / 6.5) * 0.018);
+    } else if (throttle < 0) {
+      if (this.speed > 0.15) {
+        bodyPitch = +(Math.abs(throttle) * (this.brakeForce / 14.0) * 0.024); // Braking nose-dive
+      } else {
+        bodyPitch = +(Math.abs(throttle) * 0.012); // Reverse acceleration
+      }
+    }
+    if (isHandbrake && Math.abs(this.speed) > 0.2) {
+      bodyPitch = +(0.025); // Handbrake deceleration dip
+    }
+
     if (this.chassisGroup) {
       this.chassisGroup.rotation.z = THREE.MathUtils.lerp(this.chassisGroup.rotation.z, bodyRoll, Math.min(1, 10.0 * delta));
       this.chassisGroup.rotation.x = THREE.MathUtils.lerp(this.chassisGroup.rotation.x, bodyPitch, Math.min(1, 10.0 * delta));
@@ -719,6 +747,8 @@ export class VehicleSystem {
       velocity: this.velocity,
       speed: this.speed,
       maxSpeed: this.maxSpeed,
+      terrainPitch: this.terrainPitch,
+      terrainRoll: this.terrainRoll,
     });
 
     // Also notify PlayerSystem & CameraSystem of synchronized focus
@@ -741,6 +771,10 @@ export class VehicleSystem {
       headingAngle: this.headingAngle,
       forward: { x: Math.sin(this.headingAngle), z: Math.cos(this.headingAngle) },
       steerAngle: this.steerAngle,
+      terrainPitch: this.terrainPitch,
+      terrainRoll: this.terrainRoll,
+      chassisPitch: this.chassisGroup ? this.chassisGroup.rotation.x : 0,
+      chassisRoll: this.chassisGroup ? this.chassisGroup.rotation.z : 0,
     };
   }
 }
