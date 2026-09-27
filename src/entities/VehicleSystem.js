@@ -85,48 +85,78 @@ export class VehicleSystem {
     return this.driverEntryAnchor || this.mesh;
   }
 
+  getWorldPosition(targetVec = new THREE.Vector3()) {
+    if (this.mesh) {
+      return this.mesh.getWorldPosition(targetVec);
+    }
+    return targetVec.copy(this.position);
+  }
+
   getWorldDriverEntryPosition(targetVec = new THREE.Vector3()) {
     if (this.driverEntryAnchor) {
       return this.driverEntryAnchor.getWorldPosition(targetVec);
     }
-    const offset = new THREE.Vector3(-1.15, 0, 0.2);
+    const worldPos = this.getWorldPosition(new THREE.Vector3());
+    const offset = new THREE.Vector3(-1.15, 0.8, 0.2);
     offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.headingAngle);
-    return targetVec.copy(this.position).add(offset);
+    return targetVec.copy(worldPos).add(offset);
   }
 
   getWorldDriverSeatPosition(targetVec = new THREE.Vector3()) {
+    const worldPos = this.getWorldPosition(new THREE.Vector3());
     const offset = new THREE.Vector3(-0.35, 0.65, 0.15);
     offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.headingAngle);
-    return targetVec.copy(this.position).add(offset);
+    return targetVec.copy(worldPos).add(offset);
   }
 
   getSafeExitPosition(targetVec = new THREE.Vector3()) {
-    // 1. Driver side (left side: local x = -1.35, z = 0.2)
-    const leftOffset = new THREE.Vector3(-1.35, 0, 0.2);
-    leftOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.headingAngle);
-    const candidate = this.position.clone().add(leftOffset);
-    candidate.y = getTerrainHeight(candidate.x, candidate.z);
+    const worldPos = this.getWorldPosition(new THREE.Vector3());
+    const heading = this.headingAngle;
+    const upAxis = new THREE.Vector3(0, 1, 0);
 
-    if (!this.worldSystem || !this.worldSystem.checkCollision(candidate.x, candidate.z, 0.4)) {
-      return targetVec.copy(candidate);
+    // Dynamic candidate offsets around the vehicle in local car space:
+    // (local +X = Right, -X = Left/Driver, +Z = Front, -Z = Rear)
+    const candidates = [
+      // 1. Primary Driver side (left door)
+      new THREE.Vector3(-1.35, 0, 0.2),
+      // 2. Passenger side (right door)
+      new THREE.Vector3(1.35, 0, 0.2),
+      // 3. Driver front-side offset
+      new THREE.Vector3(-1.35, 0, 1.1),
+      // 4. Passenger front-side offset
+      new THREE.Vector3(1.35, 0, 1.1),
+      // 5. Driver rear-side offset
+      new THREE.Vector3(-1.35, 0, -1.1),
+      // 6. Passenger rear-side offset
+      new THREE.Vector3(1.35, 0, -1.1),
+      // 7. Behind vehicle (rear bumper clear)
+      new THREE.Vector3(0, 0, -2.4),
+      // 8. In front of vehicle (front bumper clear)
+      new THREE.Vector3(0, 0, 2.4),
+    ];
+
+    const testPos = new THREE.Vector3();
+    for (let i = 0; i < candidates.length; i++) {
+      const offset = candidates[i].clone().applyAxisAngle(upAxis, heading);
+      testPos.copy(worldPos).add(offset);
+      testPos.y = getTerrainHeight(testPos.x, testPos.z);
+
+      const isBlocked = this.worldSystem && typeof this.worldSystem.checkCollision === 'function' &&
+        this.worldSystem.checkCollision(testPos.x, testPos.z, 0.38, testPos.y, 1.80, 0.35);
+
+      if (!isBlocked) {
+        if (window.__HEIWA_DEBUG_CAR__) {
+          console.log(`[HEIWA CAR] Safe exit candidate found at index ${i}: (${testPos.x.toFixed(2)}, ${testPos.y.toFixed(2)}, ${testPos.z.toFixed(2)})`);
+        }
+        return targetVec.copy(testPos);
+      }
     }
 
-    // 2. Passenger side (right side: local x = 1.35, z = 0.2)
-    const rightOffset = new THREE.Vector3(1.35, 0, 0.2);
-    rightOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.headingAngle);
-    candidate.copy(this.position).add(rightOffset);
-    candidate.y = getTerrainHeight(candidate.x, candidate.z);
-
-    if (!this.worldSystem || !this.worldSystem.checkCollision(candidate.x, candidate.z, 0.4)) {
-      return targetVec.copy(candidate);
-    }
-
-    // 3. Fallback: Behind vehicle
-    const rearOffset = new THREE.Vector3(0, 0, -2.4);
-    rearOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.headingAngle);
-    candidate.copy(this.position).add(rearOffset);
-    candidate.y = getTerrainHeight(candidate.x, candidate.z);
-    return targetVec.copy(candidate);
+    // Safe fallback: Driver side anchored to current vehicle world position with local terrain height
+    const fallbackOffset = new THREE.Vector3(-1.35, 0, 0.2).applyAxisAngle(upAxis, heading);
+    targetVec.copy(worldPos).add(fallbackOffset);
+    targetVec.y = getTerrainHeight(targetVec.x, targetVec.z);
+    return targetVec;
   }
 
   /**
@@ -565,15 +595,16 @@ export class VehicleSystem {
   exitVehicle() {
     if (this.state !== VehicleState.IN_VEHICLE && this.state !== 'DRIVING') return false;
 
+    const carWorldPos = this.getWorldPosition(new THREE.Vector3());
+    const safeExitPos = this.getSafeExitPosition();
+
     if (window.__HEIWA_DEBUG_CAR__) {
-      console.log('[HEIWA CAR] CAR EXIT REQUEST: IN_VEHICLE -> EXITING_VEHICLE -> ON_FOOT');
+      console.log(`[HEIWA CAR] EXIT: car=(${carWorldPos.x.toFixed(2)}, ${carWorldPos.y.toFixed(2)}, ${carWorldPos.z.toFixed(2)}) exit=(${safeExitPos.x.toFixed(2)}, ${safeExitPos.y.toFixed(2)}, ${safeExitPos.z.toFixed(2)})`);
     }
 
     this.state = VehicleState.EXITING_VEHICLE;
     this.speed = 0;
     this.velocity.set(0, 0, 0);
-
-    const safeExitPos = this.getSafeExitPosition();
 
     if (this.driverEntryAnchor) {
       this.driverEntryAnchor.userData.prompt = 'Enter Car (press twice)';
@@ -583,6 +614,7 @@ export class VehicleSystem {
     globalBus.emit('vehicle:exited', {
       exitPosition: safeExitPos,
       headingAngle: this.headingAngle,
+      vehiclePosition: carWorldPos,
     });
 
     this.state = VehicleState.ON_FOOT;

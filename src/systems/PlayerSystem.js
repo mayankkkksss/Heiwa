@@ -143,6 +143,15 @@ export class PlayerSystem {
       if (this.mesh) this.mesh.visible = false;
     });
 
+    globalBus.on('vehicle:moved', (data) => {
+      if (this.isInVehicle && data.position) {
+        this.position.copy(data.position);
+        if (this.mesh) {
+          this.mesh.position.copy(this.position);
+        }
+      }
+    });
+
     globalBus.on('vehicle:exited', (data) => {
       this.isInVehicle = false;
       if (this.mesh) {
@@ -161,6 +170,16 @@ export class PlayerSystem {
       this.verticalVelocity = 0;
       this.isGrounded = true;
       this.movementState = 'IDLE';
+
+      // Immediately broadcast player:moved at exit position for camera, minimap, streaming, etc.
+      globalBus.emit('player:moved', {
+        position: this.position,
+        headingAngle: this.headingAngle,
+        isMoving: false,
+        isJogging: false,
+        isGrounded: true,
+        speed: 0,
+      });
     });
 
     // Handle reset on new game session
@@ -1136,9 +1155,9 @@ export class PlayerSystem {
         this.position.add(this.moveStep);
       }
 
-      // District boundaries clamp
-      this.position.x = THREE.MathUtils.clamp(this.position.x, -110, 110);
-      this.position.z = THREE.MathUtils.clamp(this.position.z, -110, 110);
+      // Numerical sanity bounds for open-world exploration (no artificial district clamps)
+      this.position.x = THREE.MathUtils.clamp(this.position.x, -50000, 50000);
+      this.position.z = THREE.MathUtils.clamp(this.position.z, -50000, 50000);
 
       // Soft dynamic cylinder collision against NPCs & Mochi (Prevents direct body overlap)
       if (this.npcSystem && Array.isArray(this.npcSystem.npcs)) {
