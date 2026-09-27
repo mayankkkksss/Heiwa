@@ -95,6 +95,11 @@ export class PlayerSystem {
     this.worldSystem = null;
     this.isDialogueActive = false;
 
+    // Collision body parameters (Vertical cylinder/capsule gameplay collider)
+    this.colliderRadius = 0.38;
+    this.colliderHeight = 1.80;
+    this.stepHeight = 0.35;
+
     // Sitting system
     this.isSitting = false;
     this.benchPosition = new THREE.Vector3();
@@ -104,7 +109,8 @@ export class PlayerSystem {
   init(engine) {
     this.engine = engine;
     this.scene = engine.scene;
-    this.worldSystem = engine.systems.find((s) => typeof s.checkCollision === 'function');
+    this.worldSystem = engine.systems.find((s) => typeof s.resolvePlayerMovement === 'function' || typeof s.checkCollision === 'function');
+    this.npcSystem = engine.systems.find((s) => s.constructor.name === 'NPCSystem');
 
     this.createMayankCharacter();
 
@@ -198,9 +204,9 @@ export class PlayerSystem {
       this.limbs.head.rotation.set(0, 0, 0);
     }
 
-    // Step slightly forward in facing direction away from the bench
-    this.position.x += Math.sin(this.headingAngle) * 0.55;
-    this.position.z += Math.cos(this.headingAngle) * 0.55;
+    // Step forward in facing direction away from the bench to clear seat collider
+    this.position.x += Math.sin(this.headingAngle) * 0.75;
+    this.position.z += Math.cos(this.headingAngle) * 0.75;
     this.position.y = 0;
 
     if (this.mesh) {
@@ -1073,26 +1079,51 @@ export class PlayerSystem {
       }
     }
 
-    // 4. Apply Horizontal Position with Collision Resolution
+    // 4. Apply Horizontal Position with Collision-Aware Resolution Pipeline
     this.moveStep.copy(this.velocity).multiplyScalar(delta);
 
-    if (this.moveStep.lengthSq() > 0.000001) {
-      const nextX = this.position.x + this.moveStep.x;
-      const nextZ = this.position.z + this.moveStep.z;
-
-      // X-axis collision test
-      if (!this.worldSystem || !this.worldSystem.checkCollision(nextX, this.position.z, 0.4)) {
-        this.position.x = nextX;
-      }
-
-      // Z-axis collision test
-      if (!this.worldSystem || !this.worldSystem.checkCollision(this.position.x, nextZ, 0.4)) {
-        this.position.z = nextZ;
+    if (this.moveStep.lengthSq() > 0.000001 && !this.isSitting) {
+      if (this.worldSystem && typeof this.worldSystem.resolvePlayerMovement === 'function') {
+        this.worldSystem.resolvePlayerMovement(
+          this.position,
+          this.moveStep,
+          this.colliderRadius,
+          this.position.y,
+          this.colliderHeight,
+          this.stepHeight
+        );
+      } else {
+        this.position.add(this.moveStep);
       }
 
       // District boundaries clamp
       this.position.x = THREE.MathUtils.clamp(this.position.x, -110, 110);
       this.position.z = THREE.MathUtils.clamp(this.position.z, -110, 110);
+
+      // Soft dynamic cylinder collision against NPCs & Mochi (Prevents direct body overlap)
+      if (this.npcSystem && Array.isArray(this.npcSystem.npcs)) {
+        for (let i = 0; i < this.npcSystem.npcs.length; i++) {
+          const npc = this.npcSystem.npcs[i];
+          if (!npc || !npc.group) continue;
+          const npcPos = npc.group.position;
+          const npcRadius = npc.type === 'cat' ? 0.30 : 0.40;
+          const minDist = this.colliderRadius + npcRadius;
+          const dx = this.position.x - npcPos.x;
+          const dz = this.position.z - npcPos.z;
+          const distSq = dx * dx + dz * dz;
+
+          if (distSq < minDist * minDist) {
+            const dist = Math.sqrt(distSq);
+            if (dist > 0.001) {
+              const overlap = minDist - dist;
+              this.position.x += (dx / dist) * overlap;
+              this.position.z += (dz / dist) * overlap;
+            } else {
+              this.position.z += minDist;
+            }
+          }
+        }
+      }
     }
 
     // 5. Update Current Speed Fraction & State

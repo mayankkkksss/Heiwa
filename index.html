@@ -84,8 +84,9 @@
         <section id="gameplay-hud" class="screen-layer gameplay-hud hidden">
           <!-- Top-Left: Minimal Minimap & Location -->
           <header class="hud-top-left">
-            <div class="minimap-wrapper">
-              <canvas id="minimap-canvas" width="80" height="80"></canvas>
+            <div id="minimap-wrapper" class="minimap-wrapper" title="Toggle Map [M]">
+              <canvas id="minimap-canvas" width="320" height="320"></canvas>
+              <div id="minimap-toggle-hint" class="minimap-toggle-hint">[M]</div>
             </div>
             <div class="district-badge">
               <span id="hud-location-text" class="badge-name">Sakura Heights</span>
@@ -97,7 +98,7 @@
             <div class="hud-time-widget">
               <span id="hud-time-icon" class="time-icon">☀️</span>
               <span id="hud-time-str" class="time-text">9:00 AM</span>
-              <button id="hud-step-time-btn" title="Step Time of Day" class="hud-step-btn">🕒</button>
+              <button id="hud-step-time-btn" title="Advance Time of Day [T]" class="hud-step-btn">🕒</button>
             </div>
           </aside>
 
@@ -115,6 +116,7 @@
             <div class="hint-item"><span class="key-pill">Shift</span> Jog</div>
             <div class="hint-item"><span class="key-pill">Space</span> Jump</div>
             <div class="hint-item"><span class="key-pill">E</span> Interact</div>
+            <div class="hint-item"><span class="key-pill">T</span> Time</div>
           </div>
 
           <!-- Contextual Interaction Prompt: "E  Interact" -->

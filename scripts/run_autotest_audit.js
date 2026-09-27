@@ -92,6 +92,22 @@ assert(fs.existsSync(path.join(rootDir, 'src/systems/AudioSystem.js')), 'AudioSy
 assert(fs.existsSync(path.join(rootDir, 'src/systems/UISystem.js')), 'UISystem.js present');
 
 // -------------------------------------------------------------
+// 4. VERIFY COLLISION-AWARE MOVEMENT PIPELINE (CHUNK 31)
+// -------------------------------------------------------------
+console.log('\n--- 4. PLAYER COLLISION RESOLUTION PIPELINE CHECK ---');
+const playerSysContent = fs.readFileSync(path.join(rootDir, 'src/systems/PlayerSystem.js'), 'utf-8');
+assert(playerSysContent.includes('resolvePlayerMovement'), 'PlayerSystem.js routes displacement through worldSystem.resolvePlayerMovement');
+assert(!playerSysContent.includes('this.position.x += this.moveStep.x;'), 'PlayerSystem.js has removed unconstrained position.x update');
+assert(!playerSysContent.includes('this.position.z += this.moveStep.z;'), 'PlayerSystem.js has removed unconstrained position.z update');
+
+const worldSysContent = fs.readFileSync(path.join(rootDir, 'src/systems/WorldSystem.js'), 'utf-8');
+assert(worldSysContent.includes('resolvePlayerMovement(pos, disp'), 'WorldSystem.js defines resolvePlayerMovement method');
+assert(worldSysContent.includes('maxSubstepDist') && worldSysContent.includes('substeps'), 'WorldSystem.js implements continuous substepping');
+assert(worldSysContent.includes('proposedX') && worldSysContent.includes('proposedZ'), 'WorldSystem.js implements axis-decoupled X/Z resolution (wall sliding)');
+assert(worldSysContent.includes('registerHouseColliders'), 'WorldSystem.js registers colliders for all detached houses and perimeter fences');
+
+
+// -------------------------------------------------------------
 // SUMMARY
 // -------------------------------------------------------------
 console.log('\n====================================================');

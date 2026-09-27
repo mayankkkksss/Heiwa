@@ -244,6 +244,7 @@ export class AutoTestRunner {
     // 2. Gameplay Subsystems Verification
     await this.runTest('Camera', () => this.testE_Camera());
     await this.runTest('Movement & Jump', () => this.testF_MovementAndJump());
+    await this.runTest('Player Collision Resolution', () => this.testQ_PlayerCollisionResolution());
     await this.runTest('Bench Seating', () => this.testO_BenchSeating());
     await this.runTest('NPC Locomotion', () => this.testP_NPCLocomotion());
     await this.runTest('NPCs', () => this.testG_NPCs());
@@ -853,5 +854,184 @@ export class AutoTestRunner {
 
       return { passed: true };
     }, 6000, 'NPC locomotion test timed out');
+  }
+
+  // -------------------------------------------------------------
+  // TEST Q: Player Collision Resolution (CHUNK 31)
+  // -------------------------------------------------------------
+  async testQ_PlayerCollisionResolution() {
+    return this.runWithTimeout(async () => {
+      const world = this.controller.worldSystem;
+      const player = this.controller.playerSystem;
+      if (!world || !player) {
+        return { passed: false, error: 'WorldSystem or PlayerSystem missing' };
+      }
+
+      if (!Array.isArray(world.colliders) || world.colliders.length < 30) {
+        return {
+          passed: false,
+          error: `World colliders registry incomplete: expected >= 30, found ${world.colliders?.length}`,
+        };
+      }
+
+      const radius = player.colliderRadius || 0.38;
+      const height = player.colliderHeight || 1.80;
+      const stepHeight = player.stepHeight || 0.35;
+
+      // 1. TEST 1: Walk directly toward Tree trunk (Street tree at x: -16.5, z: -48.0)
+      // Player spawns at -24.0, -46.5. Teleport to x: -16.5, z: -46.0 (1.5m south of tree)
+      const treeX = -16.5;
+      const treeZ = -48.0;
+      const treeR = 0.46;
+      this.controller.teleportTo(treeX, 0, treeZ + 1.8);
+      await this.controller.walkDirection(0, -1, 350, false);
+      const posTreeWalk = player.position.clone();
+      const distTreeWalk = Math.hypot(posTreeWalk.x - treeX, posTreeWalk.z - treeZ);
+      if (distTreeWalk < treeR + radius - 0.05) {
+        return {
+          passed: false,
+          error: `Test 1 failed: Mayank walked through tree trunk (dist = ${distTreeWalk.toFixed(3)}, min = ${(treeR + radius).toFixed(3)})`,
+        };
+      }
+
+      // 2. TEST 2: Jog directly toward Tree trunk (Zero tunneling)
+      this.controller.teleportTo(treeX, 0, treeZ + 2.0);
+      await this.controller.walkDirection(0, -1, 400, true);
+      const posTreeJog = player.position.clone();
+      const distTreeJog = Math.hypot(posTreeJog.x - treeX, posTreeJog.z - treeZ);
+      if (distTreeJog < treeR + radius - 0.05) {
+        return {
+          passed: false,
+          error: `Test 2 failed: Mayank tunneled through tree trunk while jogging (dist = ${distTreeJog.toFixed(3)})`,
+        };
+      }
+
+      // 3. TEST 3: Tree diagonal movement (Smooth contour sliding)
+      this.controller.teleportTo(treeX - 0.1, 0, treeZ + treeR + radius);
+      const startTreeX = player.position.x;
+      await this.controller.walkDirection(-1, -1, 300, false);
+      const posTreeSlide = player.position.clone();
+      const distTreeSlide = Math.hypot(posTreeSlide.x - treeX, posTreeSlide.z - treeZ);
+      if (distTreeSlide < treeR + radius - 0.05) {
+        return {
+          passed: false,
+          error: `Test 3 failed: Diagonal walk penetrated tree trunk (dist = ${distTreeSlide.toFixed(3)})`,
+        };
+      }
+      if (posTreeSlide.x >= startTreeX - 0.04) {
+        return {
+          passed: false,
+          error: `Test 3 failed: Sliding did not occur along X around tree trunk (startX = ${startTreeX.toFixed(3)}, endX = ${posTreeSlide.x.toFixed(3)})`,
+        };
+      }
+
+      // 4. TEST 4: Walk straight into Sakura Heights front wall
+      // Sakura Heights building collider is minZ = -42.8, maxZ = -33.2, minX = -36.25, maxX = -19.75
+      this.controller.teleportTo(-24.0, 0, -32.2);
+      await this.controller.walkDirection(0, -1, 300, false);
+      const posA = player.position.clone();
+      if (posA.z < -33.2 + radius - 0.05) {
+        return {
+          passed: false,
+          error: `Test 4 failed: Mayank penetrated Sakura Heights front wall (z = ${posA.z.toFixed(3)}, boundary = ${(-33.2 + radius).toFixed(3)})`,
+        };
+      }
+
+      // 5. TEST 5: Jog straight into wall (high speed tunneling prevention)
+      this.controller.teleportTo(-24.0, 0, -31.8);
+      await this.controller.walkDirection(0, -1, 350, true);
+      const posB = player.position.clone();
+      if (posB.z < -33.2 + radius - 0.05) {
+        return {
+          passed: false,
+          error: `Test 5 failed: Mayank tunneled through wall while jogging (z = ${posB.z.toFixed(3)})`,
+        };
+      }
+
+      // 6. TEST 6: Walk diagonally into wall (Wall sliding test)
+      this.controller.teleportTo(-24.0, 0, -32.7);
+      const startX = player.position.x;
+      await this.controller.walkDirection(1, -1, 300, false);
+      const posC = player.position.clone();
+      if (posC.z < -33.2 + radius - 0.05) {
+        return {
+          passed: false,
+          error: `Test 6 failed: Diagonal walk penetrated wall (z = ${posC.z.toFixed(3)})`,
+        };
+      }
+      if (posC.x <= startX + 0.05) {
+        return {
+          passed: false,
+          error: `Test 6 failed: Wall sliding did not occur along X axis (startX = ${startX.toFixed(3)}, endX = ${posC.x.toFixed(3)})`,
+        };
+      }
+
+      // 7. TEST 7: De-penetration test
+      const testPos = new THREE.Vector3(-24.0, 0, -33.5);
+      const zeroDisp = new THREE.Vector3(0, 0, 0);
+      world.resolvePlayerMovement(testPos, zeroDisp, radius, 0, height, stepHeight);
+      if (testPos.z < -33.2 + radius - 0.01) {
+        return {
+          passed: false,
+          error: `Test 7 failed: De-penetration pass did not push player out of wall (z = ${testPos.z.toFixed(3)})`,
+        };
+      }
+
+      // 8. TEST 8: HIKARI MART Walkway & Open Doorway Entry (Entrance open at x = 18.0, z in [38.5, 45.0])
+      this.controller.teleportTo(16.0, 0, 42.0);
+      const movedInside = await this.controller.moveTo(20.0, 42.0, 3.5, 4000);
+      if (!movedInside) {
+        return {
+          passed: false,
+          error: `Test 8 failed: Mayank was blocked at HIKARI MART open entrance (pos = ${player.position.x.toFixed(2)}, ${player.position.z.toFixed(2)})`,
+        };
+      }
+
+      // 9. TEST 9: HIKARI MART Snack Shelves Collision (Shelf 1 at minZ = 39.6)
+      this.controller.teleportTo(23.5, 0, 41.5);
+      await this.controller.walkDirection(0, -1, 350, false);
+      const posF = player.position.clone();
+      if (posF.z < 40.8 + radius - 0.05) {
+        return {
+          passed: false,
+          error: `Test 9 failed: Mayank penetrated HIKARI MART snack shelf (z = ${posF.z.toFixed(3)}, shelf maxZ = 40.8)`,
+        };
+      }
+
+      // 10. TEST 10: HIKARI MART Parked Kei Car Collision (Kei car at x: 12.0..15.6, z: 47.1..48.9)
+      this.controller.teleportTo(13.8, 0, 45.0);
+      await this.controller.walkDirection(0, 1, 400, false);
+      const posCar = player.position.clone();
+      if (posCar.z > 47.1 - radius + 0.05) {
+        return {
+          passed: false,
+          error: `Test 10 failed: Mayank penetrated Kei Car body (z = ${posCar.z.toFixed(3)}, car minZ = 47.1)`,
+        };
+      }
+
+      // 11. TEST 11: Roadside Bush Planter Collision (Planter at x: -6.55..-5.85, z: -28..-12)
+      this.controller.teleportTo(-4.5, 0, -20.0);
+      await this.controller.walkDirection(-1, 0, 400, false);
+      const posPlanter = player.position.clone();
+      if (posPlanter.x < -5.85 + radius - 0.05) {
+        return {
+          passed: false,
+          error: `Test 11 failed: Mayank penetrated Roadside Bush Planter (x = ${posPlanter.x.toFixed(3)}, planter maxX = -5.85)`,
+        };
+      }
+
+      // 12. TEST 12: Park Bench Collision (Park bench 1 at x: -24.9..-24.1, z: 6.9..9.1)
+      this.controller.teleportTo(-24.5, 0, 5.0);
+      await this.controller.walkDirection(0, 1, 400, false);
+      const posBench = player.position.clone();
+      if (posBench.z > 6.9 - radius + 0.05) {
+        return {
+          passed: false,
+          error: `Test 12 failed: Mayank penetrated Park Bench (z = ${posBench.z.toFixed(3)}, bench minZ = 6.9)`,
+        };
+      }
+
+      return { passed: true };
+    }, 12000, 'Player collision resolution test timed out');
   }
 }

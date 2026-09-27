@@ -19,6 +19,10 @@ export class InputManager {
     this.canvas = null;
     this.isDialogueActive = false;
     this.isSitting = false;
+    this.isModalOpen = false;
+    this.isPointerLocked = false;
+    this.lastMousePos = { x: 0, y: 0 };
+    this.hasLastMousePos = false;
 
     // Touch / Mobile Input State
     this.touchMovement = { x: 0, z: 0, length: 0 };
@@ -31,13 +35,54 @@ export class InputManager {
     this.canvas = canvasElement;
   }
 
+  requestPointerLock() {
+    if (this.canvas && document.pointerLockElement !== this.canvas) {
+      try {
+        const promise = this.canvas.requestPointerLock?.();
+        if (promise && typeof promise.catch === 'function') {
+          promise.catch(() => {});
+        }
+      } catch (err) {
+        // Silently handle any browser security restrictions
+      }
+    }
+  }
+
+  exitPointerLock() {
+    if (document.pointerLockElement) {
+      try {
+        document.exitPointerLock?.();
+      } catch (err) {}
+    }
+    this.isPointerLocked = false;
+    this.mouse.deltaX = 0;
+    this.mouse.deltaY = 0;
+    this.hasLastMousePos = false;
+  }
+
   setupListeners() {
     globalBus.on('dialogue:open', () => {
       this.isDialogueActive = true;
+      this.exitPointerLock();
     });
 
     globalBus.on('dialogue:close', () => {
       this.isDialogueActive = false;
+      this.mouse.deltaX = 0;
+      this.mouse.deltaY = 0;
+      this.hasLastMousePos = false;
+    });
+
+    globalBus.on('ui:openInfoModal', () => {
+      this.isModalOpen = true;
+      this.exitPointerLock();
+    });
+
+    globalBus.on('ui:closeInfoModal', () => {
+      this.isModalOpen = false;
+      this.mouse.deltaX = 0;
+      this.mouse.deltaY = 0;
+      this.hasLastMousePos = false;
     });
 
     globalBus.on('player:sittingChanged', (data) => {
@@ -46,11 +91,29 @@ export class InputManager {
 
     globalBus.on('state:changed', (data) => {
       if (data.to !== GameState.PLAYING) {
+        this.exitPointerLock();
         this.isDialogueActive = false;
         this.isSitting = false;
         this.touchMovement = { x: 0, z: 0, length: 0 };
+        this.mouse.deltaX = 0;
+        this.mouse.deltaY = 0;
+        this.hasLastMousePos = false;
       }
     });
+
+    // Pointer Lock change listener
+    const onPointerLockChange = () => {
+      const isLocked = document.pointerLockElement === this.canvas || !!document.pointerLockElement;
+      this.isPointerLocked = isLocked;
+      if (!isLocked) {
+        this.mouse.deltaX = 0;
+        this.mouse.deltaY = 0;
+        this.hasLastMousePos = false;
+      }
+    };
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    document.addEventListener('mozpointerlockchange', onPointerLockChange);
+    document.addEventListener('webkitpointerlockchange', onPointerLockChange);
 
     // Keyboard keydown
     window.addEventListener('keydown', (e) => {
@@ -59,7 +122,7 @@ export class InputManager {
         e.preventDefault();
 
         // If a UI button has focus, blur it immediately so Space doesn't activate it
-        if (document.activeElement && document.activeElement instanceof HTMLElement) {
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
           document.activeElement.blur();
         }
 
@@ -84,8 +147,13 @@ export class InputManager {
         this.keys.set('Space', true);
       }
 
-      // Handle Escape: prioritize dialogue dismissal, then bench standup, then pause toggle
+      // Handle Escape: prioritize info modal dismissal, then dialogue dismissal, then bench standup, then pause toggle
       if (e.code === 'Escape' || e.key === 'Escape') {
+        const infoModal = document.getElementById('info-modal');
+        if (infoModal && !infoModal.classList.contains('hidden')) {
+          globalBus.emit('ui:closeInfoModal');
+          return;
+        }
         if (this.isDialogueActive) {
           globalBus.emit('dialogue:close');
           return;
@@ -101,6 +169,11 @@ export class InputManager {
 
       // Handle Enter on Title screen or to dismiss/advance dialogue in PLAYING state
       if (e.code === 'Enter' || e.key === 'Enter') {
+        const infoModal = document.getElementById('info-modal');
+        if (infoModal && !infoModal.classList.contains('hidden')) {
+          // Modal is active - allow normal button click if focused, but do NOT start game
+          return;
+        }
         if (globalGameState.is(GameState.TITLE)) {
           globalBus.emit('ui:startBegin');
         } else if (globalGameState.is(GameState.PLAYING)) {
@@ -117,6 +190,34 @@ export class InputManager {
             globalBus.emit('dialogue:close');
           } else {
             globalBus.emit('input:interact');
+          }
+        }
+      }
+
+      // Handle Minimap Toggle Key M: single edge-trigger (ignores text inputs)
+      if (e.code === 'KeyM' || e.key.toLowerCase() === 'm') {
+        if (!e.repeat && globalGameState.is(GameState.PLAYING)) {
+          const isTextInput =
+            e.target &&
+            (e.target.tagName === 'INPUT' ||
+             e.target.tagName === 'TEXTAREA' ||
+             !!e.target.isContentEditable);
+          if (!isTextInput) {
+            globalBus.emit('ui:toggleMinimap');
+          }
+        }
+      }
+
+      // Handle Day Cycle Advance Key T: single edge-trigger (ignores text inputs, requires active gameplay, no dialogue/modal)
+      if (e.code === 'KeyT' || e.key.toLowerCase() === 't') {
+        if (!e.repeat && globalGameState.is(GameState.PLAYING) && !this.isDialogueActive && !this.isModalOpen) {
+          const isTextInput =
+            e.target &&
+            (e.target.tagName === 'INPUT' ||
+             e.target.tagName === 'TEXTAREA' ||
+             !!e.target.isContentEditable);
+          if (!isTextInput) {
+            globalBus.emit('time:advance', { hours: 1.0 });
           }
         }
       }
@@ -137,12 +238,28 @@ export class InputManager {
       this.jumpRequested = false;
       this.mouse.isDown = false;
       this.touchMovement = { x: 0, z: 0, length: 0 };
+      this.mouse.deltaX = 0;
+      this.mouse.deltaY = 0;
+      this.hasLastMousePos = false;
     });
 
-    // Mouse events
+    // Mouse events - Free Mouse-Look & Pointer Lock
     window.addEventListener('mousedown', (e) => {
       if (e.button === 0 || e.button === 2) {
         this.mouse.isDown = true;
+      }
+
+      // When clicking during active gameplay outside UI, request pointer lock
+      if (globalGameState.is(GameState.PLAYING) && !this.isDialogueActive && !this.isModalOpen) {
+        const target = e.target;
+        const isInteractiveUI =
+          target &&
+          typeof target.closest === 'function' &&
+          (target.closest('button, a, input, textarea, #minimap-wrapper, #info-modal, #pause-modal, #dialogue-modal, .touch-controls-root, .orientation-screen') !== null);
+
+        if (!isInteractiveUI) {
+          this.requestPointerLock();
+        }
       }
     });
 
@@ -151,13 +268,53 @@ export class InputManager {
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement) {
-        this.mouse.deltaX = e.movementX || 0;
-        this.mouse.deltaY = e.movementY || 0;
-      } else if (this.mouse.isDown) {
-        this.mouse.deltaX = e.movementX || 0;
-        this.mouse.deltaY = e.movementY || 0;
+      // Free mouse-look only during active PLAYING state
+      if (!globalGameState.is(GameState.PLAYING)) {
+        this.hasLastMousePos = false;
+        return;
       }
+
+      // Do not rotate camera during dialogue or when modals are open
+      if (this.isDialogueActive || this.isModalOpen) {
+        this.hasLastMousePos = false;
+        return;
+      }
+
+      // If not pointer locked, ensure cursor is not over interactive UI elements
+      if (!this.isPointerLocked) {
+        const target = e.target;
+        if (
+          target &&
+          typeof target.closest === 'function' &&
+          target.closest('button, a, input, textarea, #minimap-wrapper, #info-modal, #pause-modal, #dialogue-modal, .touch-controls-root, .orientation-screen, .screen-layer:not(.hidden):not(.gameplay-hud)')
+        ) {
+          this.hasLastMousePos = false;
+          return;
+        }
+      }
+
+      // Extract mouse movement delta
+      let dx = 0;
+      let dy = 0;
+
+      if (typeof e.movementX === 'number' && typeof e.movementY === 'number' && (e.movementX !== 0 || e.movementY !== 0)) {
+        // Guard against single-frame pointer lock acquisition jump spikes
+        if (Math.abs(e.movementX) < 400 && Math.abs(e.movementY) < 400) {
+          dx = e.movementX;
+          dy = e.movementY;
+        }
+      } else if (this.hasLastMousePos) {
+        dx = e.clientX - this.lastMousePos.x;
+        dy = e.clientY - this.lastMousePos.y;
+      }
+
+      this.lastMousePos.x = e.clientX;
+      this.lastMousePos.y = e.clientY;
+      this.hasLastMousePos = true;
+
+      // Feed delta directly into mouse look without requiring button hold
+      this.mouse.deltaX += dx;
+      this.mouse.deltaY += dy;
     });
 
     window.addEventListener(

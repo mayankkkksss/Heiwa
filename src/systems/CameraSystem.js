@@ -47,8 +47,26 @@ export class CameraSystem {
     this.playerHeadingAngle = 0;
     this.playerIsMoving = false;
     this.mouseInactiveTimer = CAMERA_CONFIG.CAMERA_RECENTER_DELAY;
+    this.sensitivityMultiplier = 1.0;
 
     this.worldSystem = null;
+  }
+
+  /**
+   * Authoritative third-person POV camera rotation method.
+   * Consumed by both desktop free mouse-look and mobile touch camera delta inputs.
+   */
+  rotateFromInput(deltaX, deltaY) {
+    if (deltaX !== 0 || deltaY !== 0) {
+      this.theta -= deltaX * CAMERA_CONFIG.MOUSE_SENSITIVITY_X * this.sensitivityMultiplier;
+      this.phi += deltaY * CAMERA_CONFIG.MOUSE_SENSITIVITY_Y * this.sensitivityMultiplier;
+      this.clampAngles();
+      this.mouseInactiveTimer = 0; // Reset inactivity auto-follow timer
+    }
+  }
+
+  setSensitivityMultiplier(multiplier) {
+    this.sensitivityMultiplier = THREE.MathUtils.clamp(multiplier, 0.1, 3.0);
   }
 
   init(engine) {
@@ -137,11 +155,8 @@ export class CameraSystem {
       const hasMouseInput = mouse.dx !== 0 || mouse.dy !== 0;
 
       if (hasMouseInput) {
-        // Player is actively orbiting camera with mouse
-        this.theta -= mouse.dx * CAMERA_CONFIG.MOUSE_SENSITIVITY_X;
-        this.phi += mouse.dy * CAMERA_CONFIG.MOUSE_SENSITIVITY_Y;
-        this.clampAngles();
-        this.mouseInactiveTimer = 0; // Reset inactivity timer
+        // Authoritative rotation from desktop mouse or mobile touch delta
+        this.rotateFromInput(mouse.dx, mouse.dy);
       } else {
         this.mouseInactiveTimer += delta;
       }

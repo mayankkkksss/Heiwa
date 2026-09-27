@@ -24,8 +24,11 @@ export class WorldSystem {
     this.streetLights = [];
     this.windowGlows = [];
 
-    // Collision boxes for world objects
-    this.collisionBoxes = [];
+    // Solid World Collision System (Spatial Grid)
+    this.colliders = [];
+    this.collisionBoxes = []; // Backwards compatibility ref
+    this.gridCellSize = 12;
+    this.spatialGrid = new Map();
 
     // Sky & particles
     this.skyMesh = null;
@@ -48,12 +51,16 @@ export class WorldSystem {
     this.buildStreetInfrastructure();
     this.setupSakuraParticles();
 
+    // Validate authoritative solid collider registry (Category breakdown)
+    this.validateAndLogColliders();
+
     // Broadcast initial time
     this.broadcastTime();
     this.updateSunPosition();
 
-    // Listen for time step requests
-    globalBus.on('time:step', () => this.stepTimeOfDay());
+    // Listen for time step / advance requests
+    globalBus.on('time:step', () => this.advanceTime(1.0));
+    globalBus.on('time:advance', (data) => this.advanceTime(data?.hours ?? 1.0));
   }
 
   setupLighting() {
@@ -348,7 +355,12 @@ export class WorldSystem {
       rotationY: 0,
     });
     this.scene.add(mayankApt);
-    this.registerCollisionBox(-28, -38, 16.5, 9.6);
+
+    // Sakura Heights Colliders: main building block, side stair tower, resident bike shelter, mailbox
+    this.registerBoxCollider(-36.25, -19.75, -42.8, -33.2, 0, 12, 'sakura_heights_main');
+    this.registerBoxCollider(-39.45, -36.25, -40.94, -37.94, 0, 12, 'sakura_heights_stairs');
+    this.registerBoxCollider(-32.6, -28.4, -45.9, -43.7, 0, 2.4, 'sakura_heights_bike_rack');
+    this.registerBoxCollider(-23.65, -22.75, -43.5, -43.1, 0, 1.8, 'sakura_heights_mailbox');
 
     // 2. East Apartment Complex
     const eastApt = this.buildingGen.createApartmentBuilding({
@@ -357,7 +369,11 @@ export class WorldSystem {
       rotationY: Math.PI,
     });
     this.scene.add(eastApt);
-    this.registerCollisionBox(32, -38, 16.5, 9.6);
+
+    // East Apartment Colliders
+    this.registerBoxCollider(23.75, 40.25, -42.8, -33.2, 0, 12, 'east_apt_main');
+    this.registerBoxCollider(40.25, 43.45, -38.06, -35.06, 0, 12, 'east_apt_stairs');
+    this.registerBoxCollider(27.4, 31.6, -32.3, -30.1, 0, 2.4, 'east_apt_bike_rack');
 
     // 3. HIKARI MART Convenience Store Landmark
     const hikariMart = this.buildingGen.createHikariMart({
@@ -367,15 +383,24 @@ export class WorldSystem {
     });
     this.scene.add(hikariMart);
 
-    // Precise HIKARI MART colliders: perimeter walls & shelves are solid while interior aisles & entrance are walkable
-    this.registerCollisionBox(30.2, 42, 0.6, 15.2); // Back refrigerated wall
-    this.registerCollisionBox(24, 34.2, 12.2, 0.6); // North side wall
-    this.registerCollisionBox(24, 49.8, 12.2, 0.6); // South side wall
-    this.registerCollisionBox(18.0, 36.2, 0.5, 3.8); // Front left facade
-    this.registerCollisionBox(18.0, 47.8, 0.5, 3.8); // Front right facade
-    this.registerCollisionBox(24.2, 40.2, 5.5, 1.2); // Central snack shelf aisle 1
-    this.registerCollisionBox(24.2, 43.8, 5.5, 1.2); // Central snack shelf aisle 2
-    this.registerCollisionBox(21.8, 48.0, 1.2, 2.4); // Checkout counter
+    // Precise HIKARI MART colliders: walls, interior shelves & counter are solid while entrance & aisles are walkable
+    this.registerBoxCollider(29.7, 30.3, 34.5, 49.5, 0, 4.5, 'hikari_back_fridge_wall');
+    this.registerBoxCollider(18.0, 30.0, 34.2, 34.8, 0, 4.5, 'hikari_north_wall');
+    this.registerBoxCollider(18.0, 30.0, 49.2, 49.8, 0, 4.5, 'hikari_south_wall');
+    this.registerBoxCollider(17.8, 18.3, 34.5, 38.5, 0, 4.5, 'hikari_front_left_glass');
+    this.registerBoxCollider(17.8, 18.3, 45.0, 49.5, 0, 4.5, 'hikari_front_right_glass');
+    // Note: entrance between z = 38.5 and z = 45.0 at x = 18.0 is completely OPEN and walkable!
+
+    // Interior Snack Shelves (Aisles are generous and walkable)
+    this.registerBoxCollider(21.45, 26.95, 39.6, 40.8, 0, 1.8, 'hikari_shelf_1');
+    this.registerBoxCollider(21.45, 26.95, 43.2, 44.4, 0, 1.8, 'hikari_shelf_2');
+
+    // Checkout Counter
+    this.registerBoxCollider(27.2, 28.4, 45.9, 48.3, 0, 1.3, 'hikari_checkout_counter');
+
+    // Exterior Kei Car & Recycling Bins (Accurately transformed from storeGroup at x=24, z=42, rotY=-PI/2)
+    this.registerBoxCollider(12.0, 15.6, 47.1, 48.9, 0, 1.8, 'hikari_kei_car');
+    this.registerBoxCollider(16.8, 17.6, 35.0, 36.8, 0, 1.2, 'hikari_bins');
 
     // Register all interactive objects from buildings
     mayankApt.traverse((child) => {
@@ -414,7 +439,7 @@ export class WorldSystem {
         style: h.style,
       });
       this.scene.add(houseMesh);
-      this.registerCollisionBox(h.x, h.z, h.w + 2, h.d + 2);
+      this.registerHouseColliders(h.x, h.z, h.w, h.d, h.rotY);
     });
   }
 
@@ -516,6 +541,33 @@ export class WorldSystem {
     const bench1 = this.createParkBench(parkGroup, 3.5, 0, -2, -Math.PI / 2);
     const bench2 = this.createParkBench(parkGroup, -3.5, 0, 8, Math.PI / 2);
     this.interactiveObjects.push(bench1, bench2);
+
+    // Register Solid Park Colliders (World coordinates):
+    // Park perimeter south fence (z = 29, entrance open at x between -30.5 and -25.5)
+    this.registerBoxCollider(-45.0, -30.5, 28.85, 29.15, 0, 1.1, 'park_fence_left');
+    this.registerBoxCollider(-25.5, -11.0, 28.85, 29.15, 0, 1.1, 'park_fence_right');
+
+    // Park benches
+    this.registerBoxCollider(-24.9, -24.1, 6.9, 9.1, 0, 0.9, 'park_bench_1');
+    this.registerBoxCollider(-31.9, -31.1, 16.9, 19.1, 0, 0.9, 'park_bench_2');
+
+    // Playground structure
+    this.registerBoxCollider(-36.0, -32.0, 0.25, 3.75, 0, 3.2, 'park_playground');
+
+    // Drinking water fountain
+    this.registerCylinderCollider(-24.5, 14.5, 0.45, 0, 1.1, 'park_fountain');
+
+    // Flower beds
+    this.registerBoxCollider(-22.75, -18.25, 1.7, 3.3, 0, 0.5, 'park_flower_bed_1');
+    this.registerBoxCollider(-22.75, -18.25, 14.7, 16.3, 0, 0.5, 'park_flower_bed_2');
+
+    // Tree trunks
+    this.registerCylinderCollider(-18.5, 8.0, 0.55, 0, 6.0, 'park_grand_sakura');
+    this.registerCylinderCollider(-38.0, -1.0, 0.45, 0, 5.0, 'park_tree_1');
+    this.registerCylinderCollider(-18.5, -2.0, 0.45, 0, 5.0, 'park_tree_2');
+    this.registerCylinderCollider(-38.5, 21.0, 0.45, 0, 5.0, 'park_tree_3');
+    this.registerCylinderCollider(-18.0, 22.0, 0.45, 0, 5.0, 'park_maple');
+    this.registerCylinderCollider(-33.5, 10.5, 0.40, 0, 5.0, 'park_tree_4');
 
     // 9. Softening Shrubs & Grass Tufts along fence and path corners
     parkGroup.add(this.propsGen.createShrubCluster(-parkW / 2 + 1.2, 0, parkD / 2 - 0.4, 0.9));
@@ -931,6 +983,29 @@ export class WorldSystem {
 
     // 8. Japanese Vending Machine Hub on Shopping Street
     this.createVendingMachineHub(12, 0.18, 43.5);
+
+    // Register Solid Street Infrastructure Colliders:
+    // 10 Utility Poles
+    polePositions.forEach(([px, py, pz]) => {
+      this.registerCylinderCollider(px, pz, 0.28, 0, 9.0, 'utility_pole');
+    });
+
+    // Vending Machine Hub at (12, 43.5)
+    this.registerBoxCollider(11.4, 12.6, 41.8, 45.2, 0, 2.1, 'vending_hub');
+
+    // Japanese Public Red Postbox at (-8.4, 5.0)
+    this.registerBoxCollider(-8.8, -8.0, 4.6, 5.4, 0, 1.4, 'postbox');
+
+    // Garbage Collection Station at (-16, -43.2)
+    this.registerBoxCollider(-17.3, -14.7, -43.8, -42.6, 0, 1.4, 'garbage_station');
+
+    // Community Notice Boards
+    this.registerBoxCollider(-14.3, -13.7, -38.0, -36.0, 0, 2.2, 'notice_board_1');
+    this.registerBoxCollider(-9.1, -8.5, 6.5, 8.5, 0, 2.2, 'notice_board_2');
+
+    // Road Traffic Mirrors
+    this.registerCylinderCollider(-8.4, -40, 0.22, 0, 3.2, 'road_mirror_1');
+    this.registerCylinderCollider(8.4, 40, 0.22, 0, 3.2, 'road_mirror_2');
   }
 
   createVendingMachineHub(x, y, z) {
@@ -1003,28 +1078,406 @@ export class WorldSystem {
     return group;
   }
 
-  registerCollisionBox(centerX, centerZ, width, depth) {
-    this.collisionBoxes.push({
-      minX: centerX - width / 2,
-      maxX: centerX + width / 2,
-      minZ: centerZ - depth / 2,
-      maxZ: centerZ + depth / 2,
-    });
+  getGridKey(gx, gz) {
+    return `${gx}_${gz}`;
   }
 
-  checkCollision(x, z, radius = 0.4) {
-    for (let i = 0; i < this.collisionBoxes.length; i++) {
-      const b = this.collisionBoxes[i];
-      if (
-        x + radius > b.minX &&
-        x - radius < b.maxX &&
-        z + radius > b.minZ &&
-        z - radius < b.maxZ
-      ) {
-        return true;
+  addColliderToGrid(collider) {
+    const minGX = Math.floor(collider.minX / this.gridCellSize);
+    const maxGX = Math.floor(collider.maxX / this.gridCellSize);
+    const minGZ = Math.floor(collider.minZ / this.gridCellSize);
+    const maxGZ = Math.floor(collider.maxZ / this.gridCellSize);
+
+    for (let gx = minGX; gx <= maxGX; gx++) {
+      for (let gz = minGZ; gz <= maxGZ; gz++) {
+        const key = this.getGridKey(gx, gz);
+        let cell = this.spatialGrid.get(key);
+        if (!cell) {
+          cell = [];
+          this.spatialGrid.set(key, cell);
+        }
+        cell.push(collider);
+      }
+    }
+  }
+
+  registerBoxCollider(minX, maxX, minZ, maxZ, minY = 0, maxY = 25, label = 'box') {
+    const collider = {
+      type: 'box',
+      minX: Math.min(minX, maxX),
+      maxX: Math.max(minX, maxX),
+      minZ: Math.min(minZ, maxZ),
+      maxZ: Math.max(minZ, maxZ),
+      minY,
+      maxY,
+      label,
+    };
+    this.colliders.push(collider);
+    this.collisionBoxes.push(collider); // For backwards compatibility
+    this.addColliderToGrid(collider);
+  }
+
+  registerCylinderCollider(cx, cz, radius, minY = 0, maxY = 25, label = 'cylinder') {
+    const collider = {
+      type: 'cylinder',
+      cx,
+      cz,
+      radius,
+      radiusSq: radius * radius,
+      minX: cx - radius,
+      maxX: cx + radius,
+      minZ: cz - radius,
+      maxZ: cz + radius,
+      minY,
+      maxY,
+      label,
+    };
+    this.colliders.push(collider);
+    this.collisionBoxes.push(collider); // For backwards compatibility
+    this.addColliderToGrid(collider);
+  }
+
+  registerCollisionBox(centerX, centerZ, width, depth, minY = 0, maxY = 25) {
+    this.registerBoxCollider(
+      centerX - width / 2,
+      centerX + width / 2,
+      centerZ - depth / 2,
+      centerZ + depth / 2,
+      minY,
+      maxY
+    );
+  }
+
+  registerHouseColliders(cx, cz, w, d, rotY) {
+    const halfW = w / 2;
+    const halfD = d / 2;
+
+    if (Math.abs(rotY) < 0.1) {
+      // rotY = 0 (Facing South)
+      this.registerBoxCollider(cx - halfW, cx + halfW, cz - halfD, cz + halfD, 0, 7.0, 'house_main');
+      const wallW = w + 2.5;
+      const wallD = d + 3.0;
+      this.registerBoxCollider(cx - wallW / 2 - 0.1, cx - wallW / 2 + 0.1, cz - wallD / 2, cz + wallD / 2, 0, 1.2, 'house_fence_left');
+      this.registerBoxCollider(cx + wallW / 2 - 0.1, cx + wallW / 2 + 0.1, cz - wallD / 2, cz + wallD / 2, 0, 1.2, 'house_fence_right');
+      this.registerBoxCollider(cx - wallW / 2, cx + wallW / 2, cz - wallD / 2 - 0.1, cz - wallD / 2 + 0.1, 0, 1.2, 'house_fence_back');
+      // Front left fence
+      this.registerBoxCollider(cx - wallW / 2, cx - wallW * 0.14, cz + wallD / 2 - 0.1, cz + wallD / 2 + 0.1, 0, 1.2, 'house_fence_fl');
+      // Front right fence
+      this.registerBoxCollider(cx + wallW * 0.04, cx + wallW / 2, cz + wallD / 2 - 0.1, cz + wallD / 2 + 0.1, 0, 1.2, 'house_fence_fr');
+    } else if (Math.abs(rotY - Math.PI) < 0.1 || Math.abs(rotY + Math.PI) < 0.1) {
+      // rotY = PI (Facing North)
+      this.registerBoxCollider(cx - halfW, cx + halfW, cz - halfD, cz + halfD, 0, 7.0, 'house_main');
+      const wallW = w + 2.5;
+      const wallD = d + 3.0;
+      this.registerBoxCollider(cx - wallW / 2 - 0.1, cx - wallW / 2 + 0.1, cz - wallD / 2, cz + wallD / 2, 0, 1.2, 'house_fence_left');
+      this.registerBoxCollider(cx + wallW / 2 - 0.1, cx + wallW / 2 + 0.1, cz - wallD / 2, cz + wallD / 2, 0, 1.2, 'house_fence_right');
+      this.registerBoxCollider(cx - wallW / 2, cx + wallW / 2, cz + wallD / 2 - 0.1, cz + wallD / 2 + 0.1, 0, 1.2, 'house_fence_back');
+      // Front left fence (world back right)
+      this.registerBoxCollider(cx + wallW * 0.14, cx + wallW / 2, cz - wallD / 2 - 0.1, cz - wallD / 2 + 0.1, 0, 1.2, 'house_fence_fl');
+      // Front right fence (world back left)
+      this.registerBoxCollider(cx - wallW / 2, cx - wallW * 0.04, cz - wallD / 2 - 0.1, cz - wallD / 2 + 0.1, 0, 1.2, 'house_fence_fr');
+    } else if (Math.abs(rotY - Math.PI / 2) < 0.1) {
+      // rotY = PI/2 (Facing East)
+      this.registerBoxCollider(cx - halfD, cx + halfD, cz - halfW, cz + halfW, 0, 7.0, 'house_main');
+      const wallW = w + 2.5;
+      const wallD = d + 3.0;
+      this.registerBoxCollider(cx - wallD / 2 - 0.1, cx - wallD / 2 + 0.1, cz - wallW / 2, cz + wallW / 2, 0, 1.2, 'house_fence_back');
+      this.registerBoxCollider(cx - wallD / 2, cx + wallD / 2, cz - wallW / 2 - 0.1, cz - wallW / 2 + 0.1, 0, 1.2, 'house_fence_left');
+      this.registerBoxCollider(cx - wallD / 2, cx + wallD / 2, cz + wallW / 2 - 0.1, cz + wallW / 2 + 0.1, 0, 1.2, 'house_fence_right');
+      this.registerBoxCollider(cx + wallD / 2 - 0.1, cx + wallD / 2 + 0.1, cz - wallW / 2, cz - wallW * 0.14, 0, 1.2, 'house_fence_fl');
+      this.registerBoxCollider(cx + wallD / 2 - 0.1, cx + wallD / 2 + 0.1, cz + wallW * 0.04, cz + wallW / 2, 0, 1.2, 'house_fence_fr');
+    } else {
+      // rotY = -PI/2 (Facing West)
+      this.registerBoxCollider(cx - halfD, cx + halfD, cz - halfW, cz + halfW, 0, 7.0, 'house_main');
+      const wallW = w + 2.5;
+      const wallD = d + 3.0;
+      this.registerBoxCollider(cx + wallD / 2 - 0.1, cx + wallD / 2 + 0.1, cz - wallW / 2, cz + wallW / 2, 0, 1.2, 'house_fence_back');
+      this.registerBoxCollider(cx - wallD / 2, cx + wallD / 2, cz - wallW / 2 - 0.1, cz - wallW / 2 + 0.1, 0, 1.2, 'house_fence_left');
+      this.registerBoxCollider(cx - wallD / 2, cx + wallD / 2, cz + wallW / 2 - 0.1, cz + wallW / 2 + 0.1, 0, 1.2, 'house_fence_right');
+      this.registerBoxCollider(cx - wallD / 2 - 0.1, cx - wallD / 2 + 0.1, cz + wallW * 0.14, cz + wallW / 2, 0, 1.2, 'house_fence_fl');
+      this.registerBoxCollider(cx - wallD / 2 - 0.1, cx - wallD / 2 + 0.1, cz - wallW / 2, cz - wallW * 0.04, 0, 1.2, 'house_fence_fr');
+    }
+  }
+
+  resolvePlayerMovement(pos, disp, radius = 0.38, y = 0, height = 1.80, stepHeight = 0.35) {
+    const feetY = y;
+    const headY = y + height;
+
+    // Helper: De-penetrate position against a single collider
+    const depenetrateFromCollider = (p, col) => {
+      if (headY <= col.minY + stepHeight || feetY >= col.maxY) return;
+
+      if (col.type === 'box') {
+        const closestX = Math.max(col.minX, Math.min(p.x, col.maxX));
+        const closestZ = Math.max(col.minZ, Math.min(p.z, col.maxZ));
+        const dx = p.x - closestX;
+        const dz = p.z - closestZ;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq < radius * radius) {
+          const dist = Math.sqrt(distSq);
+          if (dist > 0.0001) {
+            const overlap = radius - dist + 0.001;
+            p.x += (dx / dist) * overlap;
+            p.z += (dz / dist) * overlap;
+          } else {
+            // Center is inside the box: push out along shortest axis
+            const penLeft = p.x - (col.minX - radius);
+            const penRight = (col.maxX + radius) - p.x;
+            const penBack = p.z - (col.minZ - radius);
+            const penFront = (col.maxZ + radius) - p.z;
+            const minPen = Math.min(penLeft, penRight, penBack, penFront);
+            if (minPen === penLeft) p.x = col.minX - radius - 0.001;
+            else if (minPen === penRight) p.x = col.maxX + radius + 0.001;
+            else if (minPen === penBack) p.z = col.minZ - radius - 0.001;
+            else p.z = col.maxZ + radius + 0.001;
+          }
+        }
+      } else if (col.type === 'cylinder') {
+        const dx = p.x - col.cx;
+        const dz = p.z - col.cz;
+        const distSq = dx * dx + dz * dz;
+        const minDist = col.radius + radius;
+        if (distSq < minDist * minDist) {
+          const dist = Math.sqrt(distSq);
+          if (dist > 0.0001) {
+            const overlap = minDist - dist + 0.001;
+            p.x += (dx / dist) * overlap;
+            p.z += (dz / dist) * overlap;
+          } else {
+            p.z += minDist + 0.001;
+          }
+        }
+      }
+    };
+
+    // 1. Initial De-penetration Pass across all colliders
+    for (let cIdx = 0; cIdx < this.colliders.length; cIdx++) {
+      depenetrateFromCollider(pos, this.colliders[cIdx]);
+    }
+
+    // 2. Substepped Movement
+    const totalDist = Math.hypot(disp.x, disp.z);
+    if (totalDist < 0.00001) return pos;
+
+    const maxSubstepDist = 0.04;
+    const substeps = Math.min(12, Math.max(1, Math.ceil(totalDist / maxSubstepDist)));
+    const stepX = disp.x / substeps;
+    const stepZ = disp.z / substeps;
+
+    for (let s = 0; s < substeps; s++) {
+      // -------------------------------------------------------------
+      // RESOLVE X AXIS
+      // -------------------------------------------------------------
+      if (Math.abs(stepX) > 0.00001) {
+        let proposedX = pos.x + stepX;
+
+        for (let cIdx = 0; cIdx < this.colliders.length; cIdx++) {
+          const col = this.colliders[cIdx];
+          if (headY <= col.minY + stepHeight || feetY >= col.maxY) continue;
+
+          if (col.type === 'box') {
+            const closestX = Math.max(col.minX, Math.min(proposedX, col.maxX));
+            const closestZ = Math.max(col.minZ, Math.min(pos.z, col.maxZ));
+            const dx = proposedX - closestX;
+            const dz = pos.z - closestZ;
+
+            if (dx * dx + dz * dz < radius * radius) {
+              if (pos.x <= col.minX) {
+                // Approaching box from left (+X movement into box)
+                proposedX = Math.min(proposedX, col.minX - radius - 0.0005);
+              } else if (pos.x >= col.maxX) {
+                // Approaching box from right (-X movement into box)
+                proposedX = Math.max(proposedX, col.maxX + radius + 0.0005);
+              } else {
+                // Along top or bottom face: reject X penetration
+                proposedX = pos.x;
+              }
+            }
+          } else if (col.type === 'cylinder') {
+            const dx = proposedX - col.cx;
+            const dz = pos.z - col.cz;
+            const minDist = col.radius + radius;
+
+            if (dx * dx + dz * dz < minDist * minDist) {
+              const allowedDxSq = minDist * minDist - dz * dz;
+              if (allowedDxSq > 0) {
+                const allowedDx = Math.sqrt(allowedDxSq);
+                if (pos.x <= col.cx) {
+                  proposedX = Math.min(proposedX, col.cx - allowedDx - 0.0005);
+                } else {
+                  proposedX = Math.max(proposedX, col.cx + allowedDx + 0.0005);
+                }
+              } else {
+                proposedX = pos.x;
+              }
+            }
+          }
+        }
+        pos.x = proposedX;
+      }
+
+      // -------------------------------------------------------------
+      // RESOLVE Z AXIS
+      // -------------------------------------------------------------
+      if (Math.abs(stepZ) > 0.00001) {
+        let proposedZ = pos.z + stepZ;
+
+        for (let cIdx = 0; cIdx < this.colliders.length; cIdx++) {
+          const col = this.colliders[cIdx];
+          if (headY <= col.minY + stepHeight || feetY >= col.maxY) continue;
+
+          if (col.type === 'box') {
+            const closestX = Math.max(col.minX, Math.min(pos.x, col.maxX));
+            const closestZ = Math.max(col.minZ, Math.min(proposedZ, col.maxZ));
+            const dx = pos.x - closestX;
+            const dz = proposedZ - closestZ;
+
+            if (dx * dx + dz * dz < radius * radius) {
+              if (pos.z <= col.minZ) {
+                // Approaching box from back (+Z movement into box)
+                proposedZ = Math.min(proposedZ, col.minZ - radius - 0.0005);
+              } else if (pos.z >= col.maxZ) {
+                // Approaching box from front (-Z movement into box)
+                proposedZ = Math.max(proposedZ, col.maxZ + radius + 0.0005);
+              } else {
+                // Along side face: reject Z penetration
+                proposedZ = pos.z;
+              }
+            }
+          } else if (col.type === 'cylinder') {
+            const dx = pos.x - col.cx;
+            const dz = proposedZ - col.cz;
+            const minDist = col.radius + radius;
+
+            if (dx * dx + dz * dz < minDist * minDist) {
+              const allowedDzSq = minDist * minDist - dx * dx;
+              if (allowedDzSq > 0) {
+                const allowedDz = Math.sqrt(allowedDzSq);
+                if (pos.z <= col.cz) {
+                  proposedZ = Math.min(proposedZ, col.cz - allowedDz - 0.0005);
+                } else {
+                  proposedZ = Math.max(proposedZ, col.cz + allowedDz + 0.0005);
+                }
+              } else {
+                proposedZ = pos.z;
+              }
+            }
+          }
+        }
+        pos.z = proposedZ;
+      }
+    }
+
+    // 3. Final De-penetration Safety Polish
+    for (let cIdx = 0; cIdx < this.colliders.length; cIdx++) {
+      depenetrateFromCollider(pos, this.colliders[cIdx]);
+    }
+
+    return pos;
+  }
+
+  checkCollision(x, z, radius = 0.38, y = 0, height = 1.80, stepHeight = 0.35) {
+    const feetY = y;
+    const headY = y + height;
+    const radSq = radius * radius;
+
+    for (let i = 0; i < this.colliders.length; i++) {
+      const c = this.colliders[i];
+      if (headY <= c.minY + stepHeight || feetY >= c.maxY) continue;
+
+      if (c.type === 'cylinder') {
+        const dx = x - c.cx;
+        const dz = z - c.cz;
+        const minDist = radius + c.radius;
+        if (dx * dx + dz * dz < minDist * minDist) {
+          return true;
+        }
+      } else {
+        const closestX = Math.max(c.minX, Math.min(x, c.maxX));
+        const closestZ = Math.max(c.minZ, Math.min(z, c.maxZ));
+        const dx = x - closestX;
+        const dz = z - closestZ;
+        if (dx * dx + dz * dz < radSq) {
+          return true;
+        }
       }
     }
     return false;
+  }
+
+  toggleCollisionDebug(enable = null) {
+    if (enable === null) {
+      this.debugCollisionVisible = !this.debugCollisionVisible;
+    } else {
+      this.debugCollisionVisible = !!enable;
+    }
+
+    if (this.debugCollisionGroup) {
+      this.scene.remove(this.debugCollisionGroup);
+      this.debugCollisionGroup = null;
+    }
+
+    if (this.debugCollisionVisible) {
+      this.debugCollisionGroup = new THREE.Group();
+      const wireMat = new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true });
+
+      for (let i = 0; i < this.colliders.length; i++) {
+        const c = this.colliders[i];
+        if (c.type === 'box') {
+          const w = c.maxX - c.minX;
+          const d = c.maxZ - c.minZ;
+          const h = c.maxY - c.minY;
+          const geo = new THREE.BoxGeometry(w, h, d);
+          const mesh = new THREE.Mesh(geo, wireMat);
+          mesh.position.set((c.minX + c.maxX) / 2, c.minY + h / 2, (c.minZ + c.maxZ) / 2);
+          this.debugCollisionGroup.add(mesh);
+        } else if (c.type === 'cylinder') {
+          const h = c.maxY - c.minY;
+          const geo = new THREE.CylinderGeometry(c.radius, c.radius, h, 12, 1, true);
+          const mesh = new THREE.Mesh(geo, wireMat);
+          mesh.position.set(c.cx, c.minY + h / 2, c.cz);
+          this.debugCollisionGroup.add(mesh);
+        }
+      }
+      this.scene.add(this.debugCollisionGroup);
+    }
+    return this.debugCollisionVisible;
+  }
+
+  validateAndLogColliders() {
+    let treeCount = 0;
+    let poleCount = 0;
+    let carCount = 0;
+    let fenceCount = 0;
+    let benchCount = 0;
+    let buildingCount = 0;
+    let propCount = 0;
+
+    for (const c of this.colliders) {
+      const lbl = c.label || '';
+      if (lbl.includes('tree') || lbl.includes('sakura') || lbl.includes('maple')) {
+        treeCount++;
+      } else if (lbl.includes('pole')) {
+        poleCount++;
+      } else if (lbl.includes('car')) {
+        carCount++;
+      } else if (lbl.includes('fence') || lbl.includes('planter')) {
+        fenceCount++;
+      } else if (lbl.includes('bench')) {
+        benchCount++;
+      } else if (lbl.includes('house') || lbl.includes('apt') || lbl.includes('hikari_') || lbl.includes('building')) {
+        buildingCount++;
+      } else {
+        propCount++;
+      }
+    }
+
+    if (process.env.NODE_ENV !== 'production' || typeof window !== 'undefined') {
+      console.log(
+        `[WorldSystem] World colliders registered: ${this.colliders.length} | Trees: ${treeCount} | Poles: ${poleCount} | Cars: ${carCount} | Fences/Planters: ${fenceCount} | Benches: ${benchCount} | Buildings/Interiors: ${buildingCount} | Props: ${propCount}`
+      );
+    }
   }
 
   setupSakuraParticles() {
@@ -1068,10 +1521,15 @@ export class WorldSystem {
     this.scene.add(this.petalsParticleSystem);
   }
 
-  stepTimeOfDay() {
-    this.timeOfDayHours = (this.timeOfDayHours + 3) % 24;
+  advanceTime(hours = 1.0) {
+    this.timeOfDayHours = (this.timeOfDayHours + hours) % 24;
+    if (this.timeOfDayHours < 0) this.timeOfDayHours += 24;
     this.broadcastTime();
     this.updateSunPosition();
+  }
+
+  stepTimeOfDay() {
+    this.advanceTime(1.0);
   }
 
   broadcastTime() {
@@ -1257,18 +1715,22 @@ export class WorldSystem {
 
     treeClusters.forEach((tc) => {
       let tree;
+      const s = tc.s || 1.0;
       if (tc.type === 'spreading') {
-        tree = this.createSakuraTreeSpreading(vegGroup, tc.x, 0, tc.z, tc.s);
+        tree = this.createSakuraTreeSpreading(vegGroup, tc.x, 0, tc.z, s);
       } else if (tc.type === 'tall') {
-        tree = this.createSakuraTreeTall(vegGroup, tc.x, 0, tc.z, tc.s);
+        tree = this.createSakuraTreeTall(vegGroup, tc.x, 0, tc.z, s);
       } else if (tc.type === 'compact') {
-        tree = this.createSakuraTreeCompact(vegGroup, tc.x, 0, tc.z, tc.s);
+        tree = this.createSakuraTreeCompact(vegGroup, tc.x, 0, tc.z, s);
       } else if (tc.type === 'green_maple') {
-        tree = this.createJapaneseGreenMaple(vegGroup, tc.x, 0, tc.z, tc.s);
+        tree = this.createJapaneseGreenMaple(vegGroup, tc.x, 0, tc.z, s);
       } else {
-        tree = this.createSakuraTreeWeeping(vegGroup, tc.x, 0, tc.z, tc.s);
+        tree = this.createSakuraTreeWeeping(vegGroup, tc.x, 0, tc.z, s);
       }
       tree.rotation.y = (tc.x * 17 + tc.z * 31) % Math.PI;
+
+      // Register solid world collider for tree trunk
+      this.registerCylinderCollider(tc.x, tc.z, 0.44 * s, 0, 6.0, `street_tree_${tc.type}`);
     });
 
     // 2. Low decorative hedge planters along property borders (clean foreground framing)
@@ -1297,6 +1759,17 @@ export class WorldSystem {
       hedge.position.set(pp.x, 0.58, pp.z);
       hedge.castShadow = true;
       vegGroup.add(hedge);
+
+      // Register solid world collider for sidewalk planter box
+      this.registerBoxCollider(
+        pp.x - 0.32,
+        pp.x + 0.32,
+        pp.z - pp.len / 2,
+        pp.z + pp.len / 2,
+        0,
+        1.1,
+        'sidewalk_planter'
+      );
     });
 
     // 3. Shrub Clusters softening residential walls, house corners, and HIKARI MART side

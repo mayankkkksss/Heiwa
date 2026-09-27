@@ -98,6 +98,7 @@ export class AutoTestController {
 
     const startTime = performance.now();
     const speed = isJogging ? MOVEMENT_CONFIG.JOG_SPEED : MOVEMENT_CONFIG.WALK_SPEED;
+    const disp = new THREE.Vector3();
 
     while (performance.now() - startTime < durationMs) {
       if (!globalGameState.is(GameState.PLAYING) || this.playerSystem.isDialogueActive) {
@@ -106,8 +107,25 @@ export class AutoTestController {
       }
 
       const dt = 0.016;
-      this.playerSystem.position.x += dx * speed * dt;
-      this.playerSystem.position.z += dz * speed * dt;
+      disp.set(dx * speed * dt, 0, dz * speed * dt);
+
+      if (this.worldSystem && typeof this.worldSystem.resolvePlayerMovement === 'function') {
+        const playerRadius = this.playerSystem.colliderRadius || 0.38;
+        const playerHeight = this.playerSystem.colliderHeight || 1.80;
+        const stepHeight = this.playerSystem.stepHeight || 0.35;
+        this.worldSystem.resolvePlayerMovement(
+          this.playerSystem.position,
+          disp,
+          playerRadius,
+          this.playerSystem.position.y,
+          playerHeight,
+          stepHeight
+        );
+      } else {
+        this.playerSystem.position.x += disp.x;
+        this.playerSystem.position.z += disp.z;
+      }
+
       this.playerSystem.headingAngle = Math.atan2(dx, dz);
 
       if (this.playerSystem.mesh) {
@@ -132,6 +150,7 @@ export class AutoTestController {
 
     _targetVec.set(targetX, 0, targetZ);
     const startTime = performance.now();
+    const disp = new THREE.Vector3();
 
     while (performance.now() - startTime < timeoutMs) {
       if (!globalGameState.is(GameState.PLAYING) || this.playerSystem.isDialogueActive) {
@@ -151,8 +170,25 @@ export class AutoTestController {
 
       _diffVec.normalize();
       const dt = 0.016;
-      this.playerSystem.position.x += _diffVec.x * speed * dt;
-      this.playerSystem.position.z += _diffVec.z * speed * dt;
+      disp.set(_diffVec.x * speed * dt, 0, _diffVec.z * speed * dt);
+
+      if (this.worldSystem && typeof this.worldSystem.resolvePlayerMovement === 'function') {
+        const playerRadius = this.playerSystem.colliderRadius || 0.38;
+        const playerHeight = this.playerSystem.colliderHeight || 1.80;
+        const stepHeight = this.playerSystem.stepHeight || 0.35;
+        this.worldSystem.resolvePlayerMovement(
+          this.playerSystem.position,
+          disp,
+          playerRadius,
+          this.playerSystem.position.y,
+          playerHeight,
+          stepHeight
+        );
+      } else {
+        this.playerSystem.position.x += disp.x;
+        this.playerSystem.position.z += disp.z;
+      }
+
       this.playerSystem.headingAngle = Math.atan2(_diffVec.x, _diffVec.z);
 
       if (this.playerSystem.mesh) {
