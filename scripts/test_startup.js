@@ -193,7 +193,9 @@ async function testFullStartupPipeline() {
     };
   };
   const { WorldSystem } = await import('../src/systems/WorldSystem.js');
+  const { WorldStreamingSystem } = await import('../src/world/WorldStreamingSystem.js');
   const { PlayerSystem } = await import('../src/systems/PlayerSystem.js');
+  const { VehicleSystem } = await import('../src/entities/VehicleSystem.js');
   const { CameraSystem } = await import('../src/systems/CameraSystem.js');
   const { NPCSystem } = await import('../src/systems/NPCSystem.js');
   const { InteractionSystem } = await import('../src/systems/InteractionSystem.js');
@@ -210,7 +212,9 @@ async function testFullStartupPipeline() {
   const engine = new Engine(canvas);
   const audioSystem = new AudioSystem();
   const worldSystem = new WorldSystem();
+  const streamingSystem = new WorldStreamingSystem();
   const playerSystem = new PlayerSystem();
+  const vehicleSystem = new VehicleSystem();
   const cameraSystem = new CameraSystem();
   const npcSystem = new NPCSystem();
   const interactionSystem = new InteractionSystem();
@@ -219,8 +223,10 @@ async function testFullStartupPipeline() {
 
   engine.registerSystem(audioSystem);
   engine.registerSystem(worldSystem);
+  engine.registerSystem(streamingSystem);
   engine.registerSystem(npcSystem);
   engine.registerSystem(playerSystem);
+  engine.registerSystem(vehicleSystem);
   engine.registerSystem(cameraSystem);
   engine.registerSystem(interactionSystem);
   engine.registerSystem(questSystem);
@@ -228,6 +234,7 @@ async function testFullStartupPipeline() {
 
   interactionSystem.registerTargets(worldSystem.interactiveObjects);
   interactionSystem.registerTargets(npcSystem.getInteractiveObjects());
+  interactionSystem.registerTargets(vehicleSystem.getInteractiveObjects());
 
   console.log('Initial GameState:', globalGameState.getState());
   if (globalGameState.getState() !== GameState.TITLE) {

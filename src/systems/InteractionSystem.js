@@ -18,6 +18,7 @@ export class InteractionSystem {
     this.interactionRadiusSq = this.interactionRadius * this.interactionRadius;
     this.lastInteractionTime = 0;
     this.isPlayerSitting = false;
+    this.isInVehicle = false;
 
     // Lightweight session state tracking
     this.sessionState = {
@@ -33,6 +34,12 @@ export class InteractionSystem {
 
   init(engine) {
     this.engine = engine;
+
+    // Auto-discover and register VehicleSystem interactive targets
+    const vehicleSys = this.engine.systems.find((s) => s.constructor.name === 'VehicleSystem');
+    if (vehicleSys && typeof vehicleSys.getInteractiveObjects === 'function') {
+      this.registerTargets(vehicleSys.getInteractiveObjects());
+    }
 
     globalBus.on('player:moved', (data) => {
       this.playerPos.copy(data.position);
@@ -58,6 +65,17 @@ export class InteractionSystem {
       }
     });
 
+    globalBus.on('vehicle:entered', () => {
+      this.isInVehicle = true;
+      this.currentNearestTarget = null;
+      globalBus.emit('interaction:blur');
+    });
+
+    globalBus.on('vehicle:exited', () => {
+      this.isInVehicle = false;
+      this.update();
+    });
+
     globalBus.on('input:interact', () => {
       this.triggerInteraction();
     });
@@ -77,6 +95,15 @@ export class InteractionSystem {
 
   triggerInteraction() {
     if (!globalGameState.is(GameState.PLAYING)) return;
+
+    // If currently driving, pressing E exits vehicle
+    if (this.isInVehicle) {
+      const vehicleSys = this.engine.systems.find((s) => s.constructor.name === 'VehicleSystem');
+      if (vehicleSys && (vehicleSys.state === 'IN_VEHICLE' || vehicleSys.state === 'DRIVING')) {
+        vehicleSys.exitVehicle();
+      }
+      return;
+    }
 
     // If currently sitting, pressing E stands up
     if (this.isPlayerSitting) {
@@ -122,7 +149,11 @@ export class InteractionSystem {
       return;
     }
 
-    if (this.isPlayerSitting) {
+    if (this.isPlayerSitting || this.isInVehicle) {
+      if (this.currentNearestTarget) {
+        this.currentNearestTarget = null;
+        globalBus.emit('interaction:blur');
+      }
       return;
     }
 

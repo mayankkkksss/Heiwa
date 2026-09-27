@@ -8,6 +8,8 @@ import { InteractionSystem } from './systems/InteractionSystem.js';
 import { QuestSystem } from './systems/QuestSystem.js';
 import { AudioSystem } from './systems/AudioSystem.js';
 import { UISystem } from './systems/UISystem.js';
+import { WorldStreamingSystem } from './world/WorldStreamingSystem.js';
+import { VehicleSystem } from './entities/VehicleSystem.js';
 import { globalBus } from './engine/EventBus.js';
 import { globalGameState, GameState } from './engine/GameStateManager.js';
 import { globalInput } from './engine/InputManager.js';
@@ -85,7 +87,9 @@ class GameApp {
       // 2. Instantiate Systems with Individual Safety Blocks
       const audioSystem = new AudioSystem();
       const worldSystem = new WorldSystem();
+      const streamingSystem = new WorldStreamingSystem();
       const playerSystem = new PlayerSystem();
+      const vehicleSystem = new VehicleSystem();
       const cameraSystem = new CameraSystem();
       const npcSystem = new NPCSystem();
       const interactionSystem = new InteractionSystem();
@@ -95,8 +99,10 @@ class GameApp {
       const systemsToRegister = [
         { name: 'AudioSystem', instance: audioSystem, optional: true },
         { name: 'WorldSystem', instance: worldSystem, optional: false },
+        { name: 'WorldStreamingSystem', instance: streamingSystem, optional: false },
         { name: 'NPCSystem', instance: npcSystem, optional: false },
         { name: 'PlayerSystem', instance: playerSystem, optional: false },
+        { name: 'VehicleSystem', instance: vehicleSystem, optional: false },
         { name: 'CameraSystem', instance: cameraSystem, optional: false },
         { name: 'InteractionSystem', instance: interactionSystem, optional: false },
         { name: 'QuestSystem', instance: questSystem, optional: false },
@@ -120,6 +126,9 @@ class GameApp {
       try {
         interactionSystem.registerTargets(worldSystem.interactiveObjects);
         interactionSystem.registerTargets(npcSystem.getInteractiveObjects());
+        if (typeof vehicleSystem.getInteractiveObjects === 'function') {
+          interactionSystem.registerTargets(vehicleSystem.getInteractiveObjects());
+        }
       } catch (err) {
         console.warn('[GameApp] Non-fatal error registering interactive targets:', err);
       }

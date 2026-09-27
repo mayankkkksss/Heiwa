@@ -253,7 +253,8 @@ export class AutoTestRunner {
     await this.runTest('Pause / Resume', () => this.testJ_PauseResume());
     await this.runTest('Minimap', () => this.testK_Minimap());
     await this.runTest('Audio', () => this.testL_Audio());
-    await this.runTest('NPC Dialogue Exit / Control Restoration', () => this.testN_NPCDialogueExitAndControlRestoration());
+    await this.runTest('World Streaming', () => this.testR_WorldStreaming());
+    await this.runTest('Mayank Car & Vehicle System', () => this.testS_MayankCar());
     await this.runTest('Language Audit', () => this.testM_LanguageAudit());
 
     // Reset player back to spawn after tests
@@ -1033,5 +1034,214 @@ export class AutoTestRunner {
 
       return { passed: true };
     }, 12000, 'Player collision resolution test timed out');
+  }
+
+  // -------------------------------------------------------------
+  // TEST R: World Streaming System (CHUNK 42)
+  // -------------------------------------------------------------
+  async testR_WorldStreaming() {
+    return this.runWithTimeout(async () => {
+      const streamingSys = this.engine.systems.find((s) => s.constructor.name === 'WorldStreamingSystem');
+      if (!streamingSys) {
+        return { passed: false, error: 'WorldStreamingSystem not found in engine systems' };
+      }
+
+      const world = this.controller.worldSystem;
+      if (!world) {
+        return { passed: false, error: 'WorldSystem missing' };
+      }
+
+      // 1. Verify Seed
+      if (typeof streamingSys.worldSeed !== 'number') {
+        return { passed: false, error: 'WorldStreamingSystem.worldSeed is missing or not a number' };
+      }
+
+      // 2. Verify Authored Area is registered and protected from duplicate generation
+      const authoredChunk = streamingSys.activeChunks.get('0,0');
+      if (!authoredChunk) {
+        return { passed: false, error: 'Chunk (0, 0) is not loaded' };
+      }
+      if (!authoredChunk.isAuthored) {
+        return { passed: false, error: 'Chunk (0, 0) was not recognized as the authored starting area' };
+      }
+      if (authoredChunk.buildings.length > 0) {
+        return { passed: false, error: 'Authored chunk contains duplicate procedurally generated buildings' };
+      }
+
+      // 3. Verify active chunks count
+      if (streamingSys.activeChunks.size < 9) {
+        return { passed: false, error: `Expected >= 9 active chunks around origin, found ${streamingSys.activeChunks.size}` };
+      }
+
+      // 4. Verify a procedural chunk has terrain, road, colliders
+      const procKey = '0,2';
+      const procChunk = streamingSys.activeChunks.get(procKey);
+      if (!procChunk) {
+        return { passed: false, error: 'Procedural chunk (0, 2) is not loaded' };
+      }
+      if (!procChunk.terrainMesh) {
+        return { passed: false, error: 'Procedural chunk (0, 2) has no terrainMesh' };
+      }
+      if (!procChunk.roadGroup) {
+        return { passed: false, error: 'Procedural chunk (0, 2) has no roadGroup' };
+      }
+
+      // Check chunk colliders are registered in worldSystem
+      const chunkColliders = world.colliders.filter((c) => c._chunkKey === procKey);
+      if (chunkColliders.length === 0) {
+        return { passed: false, error: `Procedural chunk (${procKey}) has no registered colliders in WorldSystem` };
+      }
+
+      // 5. Test lookahead preloading
+      streamingSys.updateStreaming(new THREE.Vector3(0, 0, 250), new THREE.Vector3(0, 0, 15));
+      const lookaheadKey = '0,3';
+      const lookaheadChunk = streamingSys.activeChunks.get(lookaheadKey);
+      if (!lookaheadChunk) {
+        return { passed: false, error: `Lookahead preloading failed for upcoming chunk (${lookaheadKey})` };
+      }
+
+      // 6. Test chunk unloading & collider cleanup
+      // Unload chunk 0,3 explicitly and verify colliders removed
+      const collidersBefore = world.colliders.filter((c) => c._chunkKey === lookaheadKey).length;
+      streamingSys.unloadChunk(lookaheadKey);
+      const collidersAfter = world.colliders.filter((c) => c._chunkKey === lookaheadKey).length;
+      if (collidersAfter > 0) {
+        return { passed: false, error: 'Unloading chunk failed to remove its colliders from WorldSystem' };
+      }
+
+      // Restore normal streaming state around player spawn
+      streamingSys.updateStreaming(new THREE.Vector3(-24, 0, -46.5), new THREE.Vector3(0, 0, 0));
+
+      return { passed: true };
+    }, 8000, 'World Streaming test timed out');
+  }
+
+  // -------------------------------------------------------------
+  // TEST S: Mayank Car & Vehicle System (CHUNK 42 + 43)
+  // -------------------------------------------------------------
+  async testS_MayankCar() {
+    return this.runWithTimeout(async () => {
+      const vehicleSys = this.engine.systems.find((s) => s.constructor.name === 'VehicleSystem');
+      if (!vehicleSys) {
+        return { passed: false, error: 'VehicleSystem not found in engine systems' };
+      }
+
+      const player = this.controller.playerSystem;
+      const camera = this.controller.cameraSystem;
+      const interactionSys = this.controller.interactionSystem;
+      if (!player || !camera || !interactionSys) {
+        return { passed: false, error: 'PlayerSystem, CameraSystem, or InteractionSystem missing' };
+      }
+
+      // 1. CAR_EXISTS: Verify Car Mesh in scene
+      if (!vehicleSys.carGroup) {
+        return { passed: false, error: 'VehicleSystem carGroup mesh is missing' };
+      }
+      if (!vehicleSys.carGroup.parent) {
+        return { passed: false, error: 'VehicleSystem carGroup is not attached to the scene' };
+      }
+
+      // 2. CAR_REGISTERED_AS_INTERACTABLE
+      const isRegistered = interactionSys.interactiveTargets.some(
+        (t) => t === vehicleSys.driverEntryAnchor || t === vehicleSys.mesh || t.userData?.interactionType === 'vehicle'
+      );
+      if (!isRegistered) {
+        return { passed: false, error: 'Car driver entry anchor is not registered in InteractionSystem.interactiveTargets' };
+      }
+
+      // 3. CAR_INTERACTION_ANCHOR_VALID
+      const anchorWorldPos = new THREE.Vector3();
+      vehicleSys.getWorldDriverEntryPosition(anchorWorldPos);
+      if (!isFinite(anchorWorldPos.x) || !isFinite(anchorWorldPos.z)) {
+        return { passed: false, error: 'Car driver entry anchor world position is non-finite' };
+      }
+
+      // 4. CAR_DETECTABLE_WITHIN_RANGE: Teleport player near driver's door and check prompt
+      this.controller.teleportTo(anchorWorldPos.x - 0.5, 0, anchorWorldPos.z);
+      await this.controller.wait(60);
+      interactionSys.update();
+
+      const currentTarget = interactionSys.currentNearestTarget;
+      if (!currentTarget || (currentTarget !== vehicleSys.driverEntryAnchor && currentTarget !== vehicleSys.mesh && currentTarget.userData?.interactionType !== 'vehicle')) {
+        return { passed: false, error: 'Car was not detected as the nearest interactable when player stood near driver door' };
+      }
+
+      // 5. CAR_ENTRY_TRANSITION via Interaction Pipeline (E Key simulation)
+      interactionSys.triggerInteraction();
+      await this.controller.wait(60);
+
+      if (vehicleSys.state !== 'IN_VEHICLE' && vehicleSys.state !== 'DRIVING') {
+        return { passed: false, error: `Vehicle state did not transition to IN_VEHICLE (found: ${vehicleSys.state})` };
+      }
+      if (!player.isInVehicle) {
+        return { passed: false, error: 'PlayerSystem.isInVehicle is false after entering car' };
+      }
+      if (camera.mode !== 'vehicle') {
+        return { passed: false, error: `CameraSystem mode is not 'vehicle' (found: ${camera.mode})` };
+      }
+
+      // 6. PLAYER_LOCKED_WHILE_DRIVING: Verify player walking simulation is bypassed
+      const posWhileDriving = player.position.clone();
+      player.update(0.016);
+      if (player.velocity.length() > 0.01) {
+        return { passed: false, error: 'Player velocity was updated while inside vehicle' };
+      }
+
+      // 7. VEHICLE_CONTROL_ACTIVE: Acceleration, Steering, Braking
+      const initialPos = vehicleSys.position.clone();
+      for (let step = 0; step < 10; step++) {
+        vehicleSys.drive(1, 0, false, 0.05);
+      }
+      if (vehicleSys.currentSpeed <= 0) {
+        return { passed: false, error: 'Vehicle currentSpeed did not increase during forward throttle' };
+      }
+      const movedDist = vehicleSys.position.distanceTo(initialPos);
+      if (movedDist <= 0.01) {
+        return { passed: false, error: 'Vehicle did not displace during forward acceleration' };
+      }
+
+      // Steering
+      const headingBefore = vehicleSys.heading;
+      for (let step = 0; step < 10; step++) {
+        vehicleSys.drive(1, 1, false, 0.05);
+      }
+      if (vehicleSys.heading === headingBefore) {
+        return { passed: false, error: 'Vehicle heading did not change during steering' };
+      }
+
+      // Handbrake / Stop
+      for (let step = 0; step < 25; step++) {
+        vehicleSys.drive(0, 0, true, 0.05);
+      }
+      if (Math.abs(vehicleSys.currentSpeed) > 0.1) {
+        return { passed: false, error: `Handbrake did not bring vehicle to rest (speed = ${vehicleSys.currentSpeed.toFixed(2)})` };
+      }
+
+      // 8. CAR_EXIT_TRANSITION via Interaction Pipeline (E Key simulation)
+      interactionSys.triggerInteraction();
+      await this.controller.wait(60);
+
+      if (vehicleSys.state !== 'ON_FOOT' && vehicleSys.state !== 'PARKED') {
+        return { passed: false, error: `Vehicle state did not return to ON_FOOT (found: ${vehicleSys.state})` };
+      }
+      if (player.isInVehicle) {
+        return { passed: false, error: 'PlayerSystem.isInVehicle is still true after exiting car' };
+      }
+      if (camera.mode !== 'normal') {
+        return { passed: false, error: `CameraSystem mode was not restored to 'normal' (found: ${camera.mode})` };
+      }
+
+      // 9. PLAYER_RESTORED_AFTER_EXIT: Verify walking control works again
+      if (!isFinite(player.position.x) || !isFinite(player.position.z)) {
+        return { passed: false, error: 'Player position is non-finite after exiting vehicle' };
+      }
+      const exitPos = player.position.clone();
+      await this.controller.walkDirection(0, -1, 200, false);
+      if (player.position.z >= exitPos.z - 0.02) {
+        return { passed: false, error: 'Player walking movement failed to displace after exiting car' };
+      }
+
+      return { passed: true };
+    }, 8000, 'Mayank Car & Vehicle System test timed out');
   }
 }

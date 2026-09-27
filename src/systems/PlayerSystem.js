@@ -135,6 +135,33 @@ export class PlayerSystem {
       this.standUp();
     });
 
+    // Vehicle listeners
+    this.isInVehicle = false;
+    globalBus.on('vehicle:entered', () => {
+      this.isInVehicle = true;
+      if (this.mesh) this.mesh.visible = false;
+    });
+
+    globalBus.on('vehicle:exited', (data) => {
+      this.isInVehicle = false;
+      if (this.mesh) {
+        this.mesh.visible = true;
+        if (data.exitPosition) {
+          this.position.copy(data.exitPosition);
+          this.mesh.position.copy(this.position);
+        }
+        if (typeof data.headingAngle === 'number') {
+          this.headingAngle = data.headingAngle;
+          this.targetHeadingAngle = data.headingAngle;
+          this.mesh.rotation.y = this.headingAngle;
+        }
+      }
+      this.velocity.set(0, 0, 0);
+      this.verticalVelocity = 0;
+      this.isGrounded = true;
+      this.movementState = 'IDLE';
+    });
+
     // Handle reset on new game session
     globalBus.on('state:changed', (data) => {
       this.endDialogueInteraction();
@@ -940,6 +967,11 @@ export class PlayerSystem {
     // Freeze motion during non-playing states (Pause, Title, Loading)
     if (!globalGameState.is(GameState.PLAYING)) {
       this.updateProceduralAnimation(delta, false, false, true, 0);
+      return;
+    }
+
+    // Bypass walking simulation when driving Mayank's car
+    if (this.isInVehicle) {
       return;
     }
 

@@ -48,8 +48,24 @@ export class CameraSystem {
     this.playerIsMoving = false;
     this.mouseInactiveTimer = CAMERA_CONFIG.CAMERA_RECENTER_DELAY;
     this.sensitivityMultiplier = 1.0;
+    this.isVehicleMode = false;
 
     this.worldSystem = null;
+  }
+
+  get mode() {
+    return this.isVehicleMode ? 'vehicle' : 'normal';
+  }
+
+  set mode(m) {
+    this.isVehicleMode = (m === 'vehicle');
+    if (this.isVehicleMode) {
+      this.desiredDistance = 6.2;
+      this.phi = 0.20;
+    } else {
+      this.desiredDistance = CAMERA_CONFIG.CAMERA_DISTANCE;
+      this.phi = 0.24;
+    }
   }
 
   /**
@@ -77,10 +93,22 @@ export class CameraSystem {
     globalBus.on('player:moved', (data) => {
       if (globalGameState.is(GameState.PLAYING) || globalGameState.is(GameState.PAUSED)) {
         this.target.copy(data.position);
-        this.target.y += CAMERA_CONFIG.CAMERA_HEIGHT;
+        this.target.y += this.isVehicleMode ? 1.65 : CAMERA_CONFIG.CAMERA_HEIGHT;
         this.playerHeadingAngle = data.headingAngle;
         this.playerIsMoving = data.isMoving;
       }
+    });
+
+    globalBus.on('vehicle:entered', (data) => {
+      this.isVehicleMode = true;
+      this.desiredDistance = 6.2;
+      this.mouseInactiveTimer = CAMERA_CONFIG.CAMERA_RECENTER_DELAY;
+    });
+
+    globalBus.on('vehicle:exited', () => {
+      this.isVehicleMode = false;
+      this.desiredDistance = CAMERA_CONFIG.CAMERA_DISTANCE;
+      this.mouseInactiveTimer = CAMERA_CONFIG.CAMERA_RECENTER_DELAY;
     });
 
     globalBus.on('player:spawned', (data) => {
