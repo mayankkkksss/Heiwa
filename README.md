@@ -36,12 +36,17 @@ HEIWA is designed around atmosphere, environmental mindfulness, and calm explora
   - [Default Controls Table](#default-controls-table)
   - [Custom Key Binding System](#custom-key-binding-system)
   - [Vehicle Controls](#vehicle-controls)
-- [Mobile Support & Touch Controls](#-mobile-support--touch-controls)
+- [Mobile Support & Fullscreen Architecture](#-mobile-support--fullscreen-architecture)
+  - [Orientation Detection & Portrait Alert](#orientation-detection--portrait-alert)
+  - [User-Activated Fullscreen Flow & Android Chrome](#user-activated-fullscreen-flow--android-chrome)
+  - [iOS Safari Full-Viewport Fallback](#ios-safari-full-viewport-fallback)
+  - [Touch Controls & Virtual Joystick](#touch-controls--virtual-joystick)
 - [Procedural Audio & Atmosphere](#-procedural-audio--atmosphere)
 - [Visual Direction & Aesthetics](#-visual-direction--aesthetics)
 - [Technical Architecture](#-technical-architecture)
 - [Project Directory Structure](#-project-directory-structure)
 - [Technology Stack](#-technology-stack)
+- [Current Production Status](#-current-production-status)
 - [Getting Started & Development Setup](#-getting-started--development-setup)
 - [Available Scripts](#-available-scripts)
 - [Production Build & Vercel Deployment](#-production-build--vercel-deployment)
@@ -49,7 +54,7 @@ HEIWA is designed around atmosphere, environmental mindfulness, and calm explora
 - [Performance & Optimization](#-performance--optimization)
 - [Browser Compatibility & Troubleshooting](#-browser-compatibility--troubleshooting)
 - [Development Guidelines & Language Rule](#-development-guidelines--language-rule)
-- [Attribution & Credits](#-attribution--credits)
+- [Credits](#-credits)
 
 ---
 
@@ -78,7 +83,8 @@ In HEIWA, you play as **Mayank**, waking up on a crisp spring morning in the Sak
 - **Interactive Minimap**: Toggleable circular HUD minimap (`[M]`) displaying roads, authored district features, and a directional chevron indicating player orientation.
 - **Robust Local Save & Resume**: Automatic multi-trigger persistence (`localStorage`) saving player position, vehicle state, quest state, world seed, and clock time, with a confirmation-protected Reset Game option.
 - **Customizable Key Bindings**: Comprehensive Settings modal allowing full remapping of keyboard actions with collision detection, reserved key filtering, and persistent storage.
-- **Mobile Landscape Support**: Dedicated touch controls featuring a virtual movement joystick, touch look surface, action buttons (Jog, Jump, Interact, Pause), and portrait orientation prompt.
+- **Mobile Orientation Alert & Fullscreen System**: Automatic portrait orientation blocker, 1-tap user-activated fullscreen entry for Android Chrome, full-viewport landscape fallback for iOS Safari, and responsive virtual controls.
+- **In-Game Credits & Info Modals**: Polished, accessible Credits and About modals accessible from Title Screen, Pause Menu, and Settings, linking directly to the developer's GitHub.
 - **Procedural Web Audio Soundscape**: Fully synthetic ambient audio featuring zone-based wind, suburban background hum, store fluorescent resonance, parametric birdsong, footstep sounds, and UI chimes.
 - **Zero Localhost/Backend Dependencies**: Pure client-side static application engineered for high-performance deployment on Vercel and modern static hosts.
 
@@ -402,9 +408,9 @@ Access **Settings → Key Bindings** from the Title Screen or Pause Menu:
 
 ---
 
-## 📱 Mobile Support & Touch Controls
+## 📱 Mobile Support & Fullscreen Architecture
 
-HEIWA includes mobile support optimized for smartphones and tablets:
+HEIWA includes a mobile architecture designed for smartphones and tablets:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -414,16 +420,30 @@ HEIWA includes mobile support optimized for smartphones and tablets:
 │    ┌──────────┐                                             │
 │    │ Virtual  │               [ Touch Look ]       (JOG)    │
 │    │ Joystick │                 Drag Area                   │
-│    └──────────┘                                    (ACTION) │
+│    │ └────────┘                                    (ACTION) │
 │                                                     (JUMP)  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-- **Landscape Orientation Enforcement**: An overlay prompts users to rotate their device if held in portrait mode.
-- **Virtual Joystick**: Dynamic floating thumbstick on the left half of the screen for movement.
-- **Touch Camera Orbit**: Dedicated swipe zone on the right half of the screen for camera control.
-- **Dedicated Touch Buttons**: Clean buttons for `JOG`, `ACTION` (`E`), `JUMP` (`Space`), and `PAUSE`.
-- **Audio Unlock**: Automatically activates Web Audio on the initial touch gesture.
+### Orientation Detection & Portrait Alert
+- When opened in **Portrait mode** on a mobile device, HEIWA displays an orientation blocker instructing the user to rotate to landscape:
+  > *"Please rotate your device to landscape to play HEIWA."*
+- Gameplay input, camera movement, and physics are safely paused during portrait display.
+
+### User-Activated Fullscreen Flow & Android Chrome
+- **Browser Security Rules**: Modern mobile browsers (including Android Chrome) require fullscreen requests to originate directly from a trusted user activation (touch/click). Asynchronous events like `orientationchange` or `resize` cannot invoke `requestFullscreen()` automatically without throwing browser security exceptions.
+- **One-Tap Fullscreen Activation**: When the device rotates into landscape on fullscreen-capable browsers, HEIWA transitions the overlay to show a single **`ENTER FULLSCREEN`** button.
+- Tapping the button directly invokes the Fullscreen API on the root `#game-container`, enters true browser fullscreen (`document.fullscreenElement !== null`), and unlocks gameplay.
+
+### iOS Safari Full-Viewport Fallback
+- Apple's WebKit on iPhone Safari does not support the Fullscreen API on arbitrary DOM elements (`document.fullscreenEnabled` is false).
+- HEIWA automatically detects this capability state via `FullscreenManager` and smoothly bypasses the fullscreen button, transitioning directly into a full-viewport landscape experience (`100dvw` × `100dvh` with `viewport-fit=cover` and notch `env(safe-area-inset-*)` padding).
+
+### Touch Controls & Virtual Joystick
+- **Virtual Joystick**: Floating thumbstick on the lower-left for analog walking and jogging.
+- **Touch Camera Look**: Dedicated swipe area on the right half of the display for 360-degree orbital camera control.
+- **Action Touch Buttons**: Ergonomic circular touch buttons for `JUMP` (`Space`), `ACTION` (`E`), `RUN` / `JOG` (`Shift`), and `PAUSE` (`⏸`).
+- **Manual Fullscreen Exit Safety**: If the player manually exits fullscreen while remaining in landscape, gameplay continues uninterrupted without triggering fullscreen request loops.
 
 ---
 
@@ -496,6 +516,7 @@ HEIWA follows a decoupled, event-driven Entity-Component-System (ECS) inspired a
 - **`GameStateManager`**: Authoritative finite state machine managing states: `TITLE`, `LOADING`, `PLAYING`, `PAUSED`, and `GAME_OVER`.
 - **`InputManager`**: Unified keyboard, mouse, pointer lock, and custom keybinding processor.
 - **`SaveSystem`**: Complete serialize/deserialize pipeline for persistent browser saves.
+- **`FullscreenManager`**: Centralized, cross-browser Fullscreen API capability detection and request utility.
 
 ---
 
@@ -526,7 +547,7 @@ HEIWA/
 │   │   ├── InputManager.js         # Unified input, mouse-look & key capture
 │   │   ├── KeyBindings.js          # Rebindable key definitions, formatters & storage
 │   │   ├── SaveSystem.js           # Atomic localStorage auto-save/resume/reset
-│   │   └── TouchControls.js        # Mobile virtual joystick & touch gestures
+│   │   └── TouchControls.js        # Mobile virtual joystick & orientation manager
 │   │
 │   ├── entities/                   # Game entities
 │   │   └── VehicleSystem.js        # Mayank's car kinematics, 4-point suspension & driving
@@ -538,7 +559,7 @@ HEIWA/
 │   │   ├── NPCSystem.js            # 10 district residents, schedules & dialogues
 │   │   ├── PlayerSystem.js         # Kinematics, walking/jogging/jumping & animation
 │   │   ├── QuestSystem.js          # "Morning Errand" progression tracker
-│   │   ├── UISystem.js             # HUD, minimap canvas, modals, Settings UI
+│   │   ├── UISystem.js             # HUD, minimap canvas, modals, Settings/Credits UI
 │   │   ├── WaypointNetwork.js      # District navigation graph & pathfinding
 │   │   └── WorldSystem.js          # Authored district assembly, lighting & collision
 │   │
@@ -548,6 +569,7 @@ HEIWA/
 │   │   └── WorldStreamingSystem.js # Deterministic infinite chunk streaming
 │   │
 │   ├── utils/                      # Utilities & mathematics
+│   │   ├── FullscreenManager.js    # Fullscreen API helper & capability detection
 │   │   ├── ProceduralTextures.js   # Canvas-generated procedural textures
 │   │   └── SeededRandom.js         # Deterministic PRNG, noise & elevation maths
 │   │
@@ -562,10 +584,12 @@ HEIWA/
     ├── test_begin_hitbox.js        # UI hitbox & pointer audit
     ├── test_car_exit_procedural.js # Vehicle coordinate exit verification
     ├── test_collision_resolution.js# Collision physics test suite
+    ├── test_credits_modal.js       # Credits modal & GitHub link verification
     ├── test_day_cycle_key.js       # Time advancement key verification
     ├── test_free_mouselook.js      # Mouse-look regression test
     ├── test_key_bindings.js        # Custom keybindings test suite
     ├── test_minimap_aaa.js         # Minimap toggle & direction test
+    ├── test_mobile_orientation_fullscreen.js # Mobile fullscreen & orientation test suite
     ├── test_modal_layering.js      # UI z-index & modal safety test
     ├── test_mouselook_behavior.js  # Camera behavior verification
     ├── test_reset_game_flow.js     # Settings Reset Game flow test
@@ -590,6 +614,28 @@ HEIWA/
 
 ---
 
+## 🚦 Current Production Status
+
+### Implemented & Verified
+- [x] **Third-Person Locomotion**: Camera-relative movement, jogging, jumping, sitting on benches.
+- [x] **Authored District (Sakuragaoka)**: Complete town with Sakura Heights, HIKARI MART, Sakuragaoka Park, streets, utility networks, and vending stations.
+- [x] **Solid Collision Resolution**: Axis-decoupled substepping wall-sliding physics across all buildings, walls, and props.
+- [x] **Living NPC Simulation**: 10 distinct residents with 24-hour schedules, waypoint pathfinding, and interactive dialogues.
+- [x] **Introductory Questline**: "The Morning Errand" quest sequence with HUD objective tracking.
+- [x] **Procedural Open World**: Deterministic multi-zone world generation (Suburban, Farmland, Woodland) with elevation math.
+- [x] **Dynamic Chunk Streaming**: 500m × 500m active grid with velocity-aware car preloading and memory disposal.
+- [x] **Physical Kei Car**: 4-point terrain ground probing, realistic chassis pitch, steering, braking, and exact-coordinate exit.
+- [x] **Atmospheric Day/Night Cycle**: 24-hour solar arc with lighting transitions and `[T]` manual time step.
+- [x] **HUD & Minimap**: Minimap radar with player orientation chevron and `[M]` toggleable expanded view.
+- [x] **Auto-Save / Resume / Reset**: Multi-trigger `localStorage` persistence with confirmation-protected Reset Game.
+- [x] **Custom Key Bindings**: Rebindable keyboard controls with conflict detection, reserved key protection, and independent storage.
+- [x] **Mobile Orientation & Fullscreen**: Landscape enforcement overlay, 1-tap user-activated fullscreen (Android Chrome), and full-viewport fallback (iOS Safari).
+- [x] **In-Game Credits & About**: Dedicated informational screens crediting Creator Mayank Suthar, GitHub, Antigravity, and ChatGPT.
+- [x] **Procedural Audio Engine**: Web Audio synthesis for wind, suburban ambience, store hum, birdsong, and footstep cadence.
+- [x] **Production Build & Vercel Readiness**: Zero localhost dependencies, pure static SPA output in `dist/`.
+
+---
+
 ## 🚀 Getting Started & Development Setup
 
 ### Prerequisites
@@ -599,8 +645,8 @@ HEIWA/
 ### 1. Clone & Install
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/heiwa.git
-cd heiwa
+git clone https://github.com/mayankkkksss/Heiwa.git
+cd Heiwa
 
 # Install dependencies
 npm install
@@ -622,16 +668,18 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to start pla
 | `npm run build` | Compiles and optimizes production assets into `dist/` |
 | `npm run preview` | Runs local HTTP preview server for `dist/` bundle at `http://localhost:4173` |
 | `npm test` | Runs the language rule audit and system architecture test suite |
+| `node scripts/test_mobile_orientation_fullscreen.js` | Runs mobile orientation & fullscreen transition verification |
 | `node scripts/test_startup.js` | Runs headless full-pipeline startup simulation & AutoTestRunner |
 | `node scripts/test_reset_game_flow.js` | Runs the Settings Reset Game verification test suite |
 | `node scripts/test_autosave_resume.js` | Runs the save/resume persistence test suite |
 | `node scripts/test_key_bindings.js` | Runs the custom key bindings verification suite |
+| `node scripts/test_credits_modal.js` | Runs the in-game Credits modal verification test |
 
 ---
 
 ## 🌐 Production Build & Vercel Deployment
 
-HEIWA is a static client-side single-page application configured for deployment on [Vercel](https://vercel.com/):
+HEIWA is a static client-side single-page application configured for zero-configuration deployment on [Vercel](https://vercel.com/):
 
 ### Vercel Configuration (`vercel.json`)
 ```json
@@ -643,19 +691,19 @@ HEIWA is a static client-side single-page application configured for deployment 
 ```
 
 ### Deployment Steps
-1. Push your code to a GitHub, GitLab, or Bitbucket repository.
-2. Import the project into the **Vercel Dashboard**.
+1. Push your code to your GitHub repository ([https://github.com/mayankkkksss/Heiwa](https://github.com/mayankkkksss/Heiwa)).
+2. Import the repository in the **Vercel Dashboard**.
 3. Vercel automatically selects the **Vite** preset:
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
    - **Install Command**: `npm install`
-4. Deploy. The game is compiled and distributed globally via Vercel's Edge CDN.
+4. Click **Deploy**. The game is compiled and distributed globally via Vercel's Edge CDN.
 
 ---
 
 ## 🧪 Testing & Quality Assurance
 
-HEIWA includes a multi-tiered automated verification suite:
+HEIWA includes an automated verification suite:
 
 ### 1. In-Browser Autonomous Test Suite (`AutoTestRunner`)
 Launch the game with `?autotest=1` (e.g. `http://localhost:3000/?autotest=1`) to run 18 automated integration tests:
@@ -676,6 +724,9 @@ Run tests locally without launching a browser:
 # Architecture & language audit
 npm test
 
+# Mobile orientation & fullscreen verification
+node scripts/test_mobile_orientation_fullscreen.js
+
 # Full startup & subsystem simulation
 node scripts/test_startup.js
 
@@ -684,6 +735,7 @@ node scripts/test_reset_game_flow.js
 node scripts/test_autosave_resume.js
 node scripts/test_key_bindings.js
 node scripts/test_streaming_and_vehicle.js
+node scripts/test_credits_modal.js
 ```
 
 ---
@@ -706,10 +758,13 @@ node scripts/test_streaming_and_vehicle.js
 - **WebGL**: Requires WebGL 1.0 or WebGL 2.0 with hardware acceleration enabled.
 
 ### Troubleshooting
+- **Mobile Fullscreen & Orientation**:
+  - *Android Chrome*: When rotating to landscape, tap **"ENTER FULLSCREEN"** to grant user-activation permission to enter full-screen mode.
+  - *iOS Safari (iPhone)*: Apple WebKit does not support Fullscreen API on standard DOM elements. HEIWA automatically falls back to full-viewport landscape with notch safe-area insets.
 - **Blank Screen / Startup Error**: Ensure hardware acceleration is enabled in browser settings (`chrome://settings/system`).
-- **Audio Not Playing**: Browsers require a user interaction (click, keypress, or tap) before allowing Web Audio playback. Audio starts automatically on your first interaction.
-- **Mobile Stuck on Rotation Screen**: Rotate device to landscape orientation.
+- **Audio Not Playing**: Browsers require a user gesture (click, keypress, or tap) before allowing Web Audio playback. Audio starts automatically on your first interaction.
 - **Resetting Saved Data**: Open **Settings → Reset Game** and click **Reset**, or clear browser site data for the domain.
+- **Vercel Preview Testing**: Run `npm run build && npm run preview` locally to test the exact production bundle before deploying.
 
 ---
 
@@ -726,6 +781,10 @@ node scripts/test_streaming_and_vehicle.js
 
 ## 🌸 Credits
 
+### Creator & Developer
+- **Mayank Suthar**
+- **GitHub**: [https://github.com/mayankkkksss/](https://github.com/mayankkkksss/)
+
 ### Development Tools & AI Assistance
 - **Antigravity** — Used for coding and implementation.
 - **ChatGPT** — Used for prompting and AI-assisted development guidance.
@@ -737,4 +796,4 @@ node scripts/test_streaming_and_vehicle.js
 
 ---
 
-**Whole project is AI-generated Including README.md; perception are not.**
+**HEIWA (平和) — A peaceful, mindful journey through everyday Japan.**

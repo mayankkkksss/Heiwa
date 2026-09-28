@@ -1,6 +1,7 @@
 import { globalBus } from './EventBus.js';
 import { globalGameState, GameState } from './GameStateManager.js';
 import { globalInput } from './InputManager.js';
+import { FullscreenManager } from '../utils/FullscreenManager.js';
 
 /**
  * TouchControls - Mobile Landscape Virtual Controls & Orientation Flow Manager
@@ -10,9 +11,16 @@ export class TouchControls {
     this.isTouch = false;
     this.isLandscape = false;
     this.wasPlayingBeforePortrait = false;
+    this.lastOrientation = null; // 'portrait' | 'landscape' | null
 
     // DOM References
     this.orientationScreen = null;
+    this.orientationIconRotate = null;
+    this.orientationTitle = null;
+    this.orientationMessage = null;
+    this.orientationActionBox = null;
+    this.btnEnterFullscreen = null;
+    this.btnSkipFullscreen = null;
     this.touchControlsRoot = null;
     this.joystickZone = null;
     this.joystickBase = null;
@@ -43,6 +51,7 @@ export class TouchControls {
     this.detectTouchCapability();
     this.cacheElements();
     this.setupOrientationHandling();
+    this.setupFullscreenListeners();
     this.setupJoystick();
     this.setupTouchLook();
     this.setupActionButtons();
@@ -53,17 +62,42 @@ export class TouchControls {
   }
 
   detectTouchCapability() {
-    // Robust touch capability detection
+    // Robust touch capability detection with mobile vs desktop differentiation
     const hasTouch =
-      'ontouchstart' in window ||
-      navigator.maxTouchPoints > 0 ||
-      (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+      typeof window !== 'undefined' &&
+      ('ontouchstart' in window ||
+        (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) ||
+        (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches));
 
-    this.isTouch = hasTouch;
+    const isMobileUA =
+      typeof navigator !== 'undefined' &&
+      /Android|iPhone|iPad|iPod|Windows Phone|webOS|BlackBerry|Mobile/i.test(navigator.userAgent || '');
+
+    const isCoarseOnly =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(pointer: coarse) and (hover: none)').matches;
+
+    this.isTouch = Boolean(
+      hasTouch &&
+        (isMobileUA ||
+          isCoarseOnly ||
+          (typeof navigator !== 'undefined' &&
+            navigator.maxTouchPoints > 0 &&
+            typeof window !== 'undefined' &&
+            Math.max(window.innerWidth, window.innerHeight) <= 1366))
+    );
   }
 
   cacheElements() {
+    if (typeof document === 'undefined') return;
     this.orientationScreen = document.getElementById('orientation-screen');
+    this.orientationIconRotate = document.getElementById('orientation-icon-rotate');
+    this.orientationTitle = document.getElementById('orientation-title');
+    this.orientationMessage = document.getElementById('orientation-message');
+    this.orientationActionBox = document.getElementById('orientation-action-box');
+    this.btnEnterFullscreen = document.getElementById('btn-enter-fullscreen');
+    this.btnSkipFullscreen = document.getElementById('btn-skip-fullscreen');
     this.touchControlsRoot = document.getElementById('touch-controls-root');
     this.joystickZone = document.getElementById('touch-joystick-zone');
     this.joystickBase = document.getElementById('joystick-base');
@@ -77,55 +111,194 @@ export class TouchControls {
   }
 
   setupOrientationHandling() {
+    if (typeof window === 'undefined') return;
+
     const handleOrientationChange = () => {
-      // Re-evaluate touch capability in case device emulation or stylus connected
       this.detectTouchCapability();
       this.checkOrientation();
     };
 
     window.addEventListener('resize', handleOrientationChange);
-    window.addEventListener('orientationchange', handleOrientationChange);
+    window.addEventListener('orientationchange', () => {
+      handleOrientationChange();
+      setTimeout(handleOrientationChange, 80);
+      setTimeout(handleOrientationChange, 240);
+    });
 
     if (window.screen && window.screen.orientation) {
-      window.screen.orientation.addEventListener('change', handleOrientationChange);
+      window.screen.orientation.addEventListener('change', () => {
+        handleOrientationChange();
+        setTimeout(handleOrientationChange, 80);
+        setTimeout(handleOrientationChange, 240);
+      });
+    }
+
+    if (window.matchMedia) {
+      try {
+        const mql = window.matchMedia('(orientation: landscape)');
+        if (typeof mql.addEventListener === 'function') {
+          mql.addEventListener('change', handleOrientationChange);
+        } else if (typeof mql.addListener === 'function') {
+          mql.addListener(handleOrientationChange);
+        }
+      } catch (e) {}
     }
   }
 
+  setupFullscreenListeners() {
+    // Fullscreen state listener via FullscreenManager
+    FullscreenManager.addChangeListener((isFs) => {
+      if (isFs && !this.isPortraitMode()) {
+        this.onFullscreenSuccess();
+      }
+    });
+
+    // One-tap Fullscreen Action Button
+    if (this.btnEnterFullscreen) {
+      const handleEnterFs = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Direct trusted user activation invocation
+        const success = await FullscreenManager.requestGameFullscreen(
+          document.getElementById('game-container')
+        );
+
+        if (success || !this.isPortraitMode()) {
+          this.onFullscreenSuccess();
+        }
+      };
+
+      this.btnEnterFullscreen.addEventListener('click', handleEnterFs);
+      this.btnEnterFullscreen.addEventListener('touchend', handleEnterFs);
+    }
+
+    // Skip / Windowed Landscape Button
+    if (this.btnSkipFullscreen) {
+      const handleSkip = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onFullscreenSuccess();
+      };
+
+      this.btnSkipFullscreen.addEventListener('click', handleSkip);
+      this.btnSkipFullscreen.addEventListener('touchend', handleSkip);
+    }
+  }
+
+  onFullscreenSuccess() {
+    this.orientationScreen?.classList.add('hidden');
+    this.orientationActionBox?.classList.add('hidden');
+
+    if (this.wasPlayingBeforePortrait && globalGameState.is(GameState.PAUSED)) {
+      this.wasPlayingBeforePortrait = false;
+      globalGameState.setState(GameState.PLAYING);
+    }
+
+    this.updateTouchControlsVisibility();
+    globalBus.emit('viewport:resize', {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+  }
+
+  isPortraitMode() {
+    // 1. screen.orientation API
+    if (
+      typeof window !== 'undefined' &&
+      window.screen &&
+      window.screen.orientation &&
+      typeof window.screen.orientation.type === 'string'
+    ) {
+      if (window.screen.orientation.type.startsWith('portrait')) return true;
+      if (window.screen.orientation.type.startsWith('landscape')) return false;
+    }
+
+    // 2. CSS matchMedia orientation query
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      try {
+        const mqlPortrait = window.matchMedia('(orientation: portrait)');
+        if (mqlPortrait && mqlPortrait.matches) return true;
+        const mqlLandscape = window.matchMedia('(orientation: landscape)');
+        if (mqlLandscape && mqlLandscape.matches) return false;
+      } catch (e) {}
+    }
+
+    // 3. Fallback: viewport dimensions
+    if (typeof window !== 'undefined') {
+      return window.innerHeight > window.innerWidth;
+    }
+    return false;
+  }
+
   checkOrientation() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const isPortrait = h > w;
+    const isPortrait = this.isPortraitMode();
     this.isLandscape = !isPortrait;
 
     // Only enforce orientation screen on actual touch/mobile devices
     if (this.isTouch) {
       if (isPortrait) {
-        // Show orientation blocker
+        // Show orientation blocker in portrait mode
         this.orientationScreen?.classList.remove('hidden');
+        this.orientationIconRotate?.classList.remove('hidden');
+        if (this.orientationTitle) this.orientationTitle.textContent = 'Landscape Mode Required';
+        if (this.orientationMessage) {
+          this.orientationMessage.textContent = 'Please rotate your device to landscape to play HEIWA.';
+        }
+        this.orientationActionBox?.classList.add('hidden');
         this.touchControlsRoot?.classList.add('hidden');
 
-        // Safely pause gameplay if playing
+        // Immediately reset touch inputs so nothing lingers
+        this.resetJoystick();
+        this.resetTouchLook();
+        globalInput.setTouchMovement(0, 0, 0);
+
+        // Safely pause gameplay if currently playing
         if (globalGameState.is(GameState.PLAYING)) {
           this.wasPlayingBeforePortrait = true;
           globalGameState.setState(GameState.PAUSED);
         }
-      } else {
-        // Landscape mode: hide orientation blocker
-        this.orientationScreen?.classList.add('hidden');
 
-        // Resume if we were playing before portrait orientation
-        if (this.wasPlayingBeforePortrait && globalGameState.is(GameState.PAUSED)) {
-          this.wasPlayingBeforePortrait = false;
-          globalGameState.setState(GameState.PLAYING);
+        this.lastOrientation = 'portrait';
+      } else {
+        // Landscape mode:
+        const isFs = FullscreenManager.isGameFullscreen();
+        const isFsSupported = FullscreenManager.isFullscreenSupported();
+        const isTransitionFromPortrait = this.lastOrientation === 'portrait';
+
+        if (isFs || !isFsSupported || !isTransitionFromPortrait) {
+          // If already in fullscreen, OR if fullscreen is unsupported by browser (e.g. iOS Safari on iPhone),
+          // OR if user was already playing in landscape (e.g. exited fullscreen without rotating):
+          // Directly hide orientation blocker and keep landscape gameplay active
+          this.orientationScreen?.classList.add('hidden');
+          this.orientationActionBox?.classList.add('hidden');
+
+          if (this.wasPlayingBeforePortrait && globalGameState.is(GameState.PAUSED)) {
+            this.wasPlayingBeforePortrait = false;
+            globalGameState.setState(GameState.PLAYING);
+          }
+
+          this.updateTouchControlsVisibility();
+        } else {
+          // Just rotated from portrait -> landscape, fullscreen is supported and requires user activation (e.g. Android Chrome):
+          // Present the single-tap "ENTER FULLSCREEN" prompt
+          this.orientationScreen?.classList.remove('hidden');
+          this.orientationIconRotate?.classList.add('hidden');
+          if (this.orientationTitle) this.orientationTitle.textContent = 'Landscape Detected';
+          if (this.orientationMessage) {
+            this.orientationMessage.textContent = 'Tap below to enter full-screen mode and start playing.';
+          }
+          this.orientationActionBox?.classList.remove('hidden');
+          this.touchControlsRoot?.classList.add('hidden');
         }
 
-        // Show touch controls if playing
-        this.updateTouchControlsVisibility();
+        this.lastOrientation = 'landscape';
       }
     } else {
       // Desktop: ensure orientation screen is hidden
       this.orientationScreen?.classList.add('hidden');
       this.touchControlsRoot?.classList.add('hidden');
+      this.lastOrientation = isPortrait ? 'portrait' : 'landscape';
     }
   }
 

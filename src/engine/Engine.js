@@ -60,12 +60,27 @@ export class Engine {
   initEventListeners() {
     window.addEventListener('resize', () => this.handleResize());
     window.addEventListener('orientationchange', () => {
-      setTimeout(() => this.handleResize(), 50);
+      this.handleResize();
+      setTimeout(() => this.handleResize(), 60);
+      setTimeout(() => this.handleResize(), 240);
     });
     if (window.screen && window.screen.orientation) {
       window.screen.orientation.addEventListener('change', () => {
-        setTimeout(() => this.handleResize(), 50);
+        this.handleResize();
+        setTimeout(() => this.handleResize(), 60);
+        setTimeout(() => this.handleResize(), 240);
       });
+    }
+    if (typeof document !== 'undefined') {
+      const onFsChange = () => {
+        this.handleResize();
+        setTimeout(() => this.handleResize(), 60);
+        setTimeout(() => this.handleResize(), 240);
+      };
+      document.addEventListener('fullscreenchange', onFsChange);
+      document.addEventListener('webkitfullscreenchange', onFsChange);
+      document.addEventListener('mozfullscreenchange', onFsChange);
+      document.addEventListener('MSFullscreenChange', onFsChange);
     }
   }
 

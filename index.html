@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>HEIWA — 平和</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate icon" type="image/png" href="/favicon.png" />
@@ -20,11 +20,11 @@
 
       <!-- UI Overlays Root -->
       <div id="ui-root">
-        <!-- 0. ORIENTATION SCREEN (Mobile Portrait Warning) -->
+        <!-- 0. ORIENTATION SCREEN (Mobile Portrait Warning & Fullscreen Transition) -->
         <section id="orientation-screen" class="screen-layer orientation-screen hidden">
           <div class="orientation-content">
             <div class="orientation-kanji">平和</div>
-            <div class="orientation-device-icon">
+            <div id="orientation-icon-rotate" class="orientation-device-icon">
               <svg viewBox="0 0 48 48" class="device-rotate-svg" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="14" y="6" width="20" height="36" rx="4" ry="4" class="phone-body" />
                 <line x1="22" y1="36" x2="26" y2="36" />
@@ -32,8 +32,15 @@
                 <polyline points="26 1 31 4 27 9" />
               </svg>
             </div>
-            <h2 class="orientation-title">Landscape Mode Required</h2>
-            <p class="orientation-message">Please rotate your device to landscape to play HEIWA.</p>
+            <h2 id="orientation-title" class="orientation-title">Landscape Mode Required</h2>
+            <p id="orientation-message" class="orientation-message">Please rotate your device to landscape to play HEIWA.</p>
+            <div id="orientation-action-box" class="orientation-action-box hidden">
+              <button id="btn-enter-fullscreen" class="btn-primary orientation-btn-fullscreen">
+                <span class="btn-text">ENTER FULLSCREEN</span>
+                <span class="btn-subtext">TAP TO PLAY</span>
+              </button>
+              <button id="btn-skip-fullscreen" class="orientation-btn-skip">Play in Landscape</button>
+            </div>
           </div>
         </section>
 
